@@ -1,0 +1,1805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>respawn · ascii recovery viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #020a0f;
+    --bg-grad-1: #1e1e28;
+    --bg-grad-2: #141317;
+    --panel: #ffffff;
+    --panel-text: #2b2926;
+    --panel-muted: #50565d;
+    --panel-border: #e6e6eb;
+    --stone-1: #3f3c39;
+    --stone-2: #a4a8af;
+    --accent: #0000ee;
+    --accent-soft: rgba(0, 0, 238, 0.08);
+    --accent-on-dark: #5b8def;
+    --accent-on-dark-soft: rgba(91, 141, 239, 0.18);
+    --fault: #ff2c2c;
+    --fault-bg: rgba(255, 44, 44, 0.12);
+    --ascii-default: #e6e6eb;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--panel-text);
+    font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  #app {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    width: 100%;
+    height: 100vh;       /* fallback for older browsers */
+    height: 100dvh;      /* fixes iOS Safari URL-bar viewport jump */
+    min-height: 480px;
+  }
+
+  /* ---------- viewer ---------- */
+  #viewer {
+    position: relative;
+    background: radial-gradient(ellipse at center, var(--bg-grad-1) 0%, var(--bg-grad-2) 60%, var(--bg) 100%);
+    overflow: hidden;
+    cursor: grab;
+    user-select: none;
+  }
+  #viewer:active { cursor: grabbing; }
+
+  #ascii {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0; padding: 0;
+    font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 500;
+    line-height: 1.0;
+    letter-spacing: 0;
+    white-space: pre;
+    text-align: left;
+    pointer-events: none;
+    color: var(--ascii-default);
+    /* photographic bloom — softens character edges so the ramp reads as continuous tone */
+    text-shadow:
+      0 0 1.2px currentColor,
+      0 0 4px rgba(91, 141, 239, 0.18),
+      0 0 8px rgba(91, 141, 239, 0.08);
+  }
+
+  /* phase border flash */
+  #fault-flash {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    box-shadow: inset 0 0 0 2px transparent;
+    transition: box-shadow 0.18s ease, background 0.18s ease;
+    z-index: 1;
+  }
+  #fault-flash.fault {
+    box-shadow: inset 0 0 0 2px var(--fault), inset 0 0 80px rgba(255, 44, 44, 0.18);
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(255, 44, 44, 0.08) 100%);
+  }
+  #fault-flash.respawn {
+    box-shadow: inset 0 0 0 2px var(--accent-on-dark), inset 0 0 80px rgba(91, 141, 239, 0.22);
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(91, 141, 239, 0.10) 100%);
+  }
+  #fault-flash.recovered {
+    box-shadow: inset 0 0 0 2px var(--accent-on-dark), inset 0 0 60px rgba(91, 141, 239, 0.14);
+  }
+
+  #overlay {
+    position: absolute;
+    top: 24px; left: 28px;
+    display: flex; flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+    z-index: 3;
+    max-width: 55%;
+  }
+
+  .brand-mark {
+    display: flex; align-items: center; gap: 8px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    color: var(--stone-2);
+    letter-spacing: 0.04em;
+  }
+  .brand-mark .dot {
+    width: 6px; height: 6px;
+    background: var(--accent-on-dark);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--accent-on-dark);
+  }
+
+  #headline {
+    font-size: 22px; line-height: 1.15;
+    color: #ffffff; font-weight: 500;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+  #headline em {
+    font-style: normal;
+    color: var(--accent-on-dark);
+    background: var(--accent-on-dark-soft);
+    padding: 0 4px;
+  }
+
+  #subtitle {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    color: var(--stone-2);
+    letter-spacing: 0.02em;
+  }
+
+  /* ---------- fault log feed (right column) ---------- */
+  #fault-log {
+    position: absolute;
+    top: 100px;
+    right: 28px;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 360px;
+    max-width: calc(100vw - 56px);
+    max-height: calc(100% - 220px);
+    pointer-events: none;
+    overflow: hidden;
+    font-family: "JetBrains Mono", monospace;
+  }
+
+  .log-entry {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    gap: 8px;
+    align-items: baseline;
+    padding: 7px 11px;
+    border-left: 2px solid rgba(255, 255, 255, 0.18);
+    background: rgba(20, 22, 28, 0.78);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 0 2px 2px 0;
+    opacity: 0;
+    transform: translateX(8px);
+    transition: opacity 0.28s ease, transform 0.28s ease, max-height 0.4s ease, padding 0.4s ease, margin 0.4s ease;
+    line-height: 1.35;
+    font-size: 11px;
+  }
+  .log-entry.show { opacity: 1; transform: translateX(0); }
+  .log-entry.fade { opacity: 0; transform: translateX(-8px); transition: opacity 0.7s ease, transform 0.7s ease; }
+
+  .log-entry.log-fault { border-left-color: var(--fault); }
+  .log-entry.log-scan,
+  .log-entry.log-draft,
+  .log-entry.log-caught { border-left-color: var(--accent-on-dark); }
+
+  .log-ts {
+    color: var(--stone-2);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  .log-tag {
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+  }
+  .log-entry.log-fault .log-tag { color: var(--fault); }
+  .log-entry.log-scan .log-tag,
+  .log-entry.log-draft .log-tag,
+  .log-entry.log-caught .log-tag { color: var(--accent-on-dark); }
+  .log-text { color: #ffffff; word-break: break-word; }
+  .log-entry.log-caught .log-text { color: #ffffff; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  /* ---------- value ledger (bottom left) ---------- */
+  #ledger {
+    position: absolute;
+    bottom: 24px; left: 28px;
+    z-index: 2;
+    pointer-events: none;
+    background: rgba(20, 22, 28, 0.72);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 14px 18px;
+    border-radius: 2px;
+    font-family: "JetBrains Mono", monospace;
+    min-width: 280px;
+  }
+  .ledger-eyebrow {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--accent-on-dark);
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ledger-eyebrow::before {
+    content: "";
+    width: 6px; height: 6px;
+    background: var(--accent-on-dark);
+    border-radius: 50%;
+    box-shadow: 0 0 6px var(--accent-on-dark);
+  }
+
+  .ledger-primary {
+    display: flex; align-items: baseline; gap: 10px;
+    margin-bottom: 10px;
+  }
+  .ledger-amount {
+    font-size: 26px;
+    color: #ffffff;
+    font-weight: 600;
+    font-feature-settings: "tnum";
+    line-height: 1;
+  }
+  .ledger-label {
+    font-size: 10px;
+    color: var(--stone-2);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .ledger-row {
+    display: flex; flex-direction: column;
+    gap: 4px;
+    margin-bottom: 10px;
+  }
+  .ledger-cell {
+    font-size: 10px;
+    color: var(--stone-2);
+    letter-spacing: 0.04em;
+  }
+  .ledger-cell span {
+    color: #ffffff;
+    font-weight: 600;
+    font-feature-settings: "tnum";
+  }
+
+  .ledger-meta {
+    font-size: 9px;
+    color: var(--stone-2);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .ledger-meta .caught-count { color: var(--accent-on-dark); font-weight: 600; }
+  .ledger-meta .held-count { color: var(--accent-on-dark); font-weight: 600; }
+
+  #fps {
+    position: absolute;
+    top: 24px; right: 28px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    color: var(--stone-2);
+    letter-spacing: 0.04em;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  /* ---------- panel ---------- */
+  #panel {
+    background: var(--panel);
+    color: var(--panel-text);
+    border-left: 1px solid var(--panel-border);
+    padding: 28px 24px 32px;
+    overflow-y: auto;
+    display: flex; flex-direction: column;
+    gap: 22px;
+  }
+
+  .panel-header {
+    display: flex; flex-direction: column;
+    gap: 6px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--panel-border);
+  }
+  .panel-header .eyebrow {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+  }
+  .panel-header h2 {
+    margin: 0;
+    font-size: 17px; font-weight: 500;
+    color: var(--panel-text);
+    letter-spacing: -0.01em;
+  }
+  .panel-header p {
+    margin: 0;
+    font-size: 12px;
+    color: var(--panel-muted);
+    line-height: 1.45;
+  }
+
+  .group {
+    display: flex; flex-direction: column;
+    gap: 10px;
+  }
+  .group-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--panel-muted);
+  }
+
+  select, input[type="range"], button {
+    width: 100%;
+    background: #ffffff;
+    border: 1px solid var(--panel-border);
+    color: var(--panel-text);
+    border-radius: 2px;
+    font-family: inherit;
+    font-size: 13px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  }
+  select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5l3 3 3-3' fill='none' stroke='%232b2926' stroke-width='1.5'/></svg>"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 34px; }
+  select:hover, button:hover { border-color: var(--accent); color: var(--accent); }
+  select:focus, button:focus { outline: none; border-color: var(--accent); }
+
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    height: 2px; padding: 0;
+    background: var(--panel-border);
+    border: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    background: var(--accent);
+    border-radius: 0; cursor: pointer; border: 0;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px;
+    background: var(--accent);
+    border-radius: 0; cursor: pointer; border: 0;
+  }
+
+  .slider-row {
+    display: flex; align-items: baseline;
+    justify-content: space-between;
+    font-size: 12px; color: var(--panel-muted);
+  }
+  .slider-row .value {
+    font-family: "JetBrains Mono", monospace;
+    color: var(--accent);
+    font-size: 12px; font-weight: 500;
+  }
+
+  .toggle-group {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .toggle-group button {
+    padding: 9px 6px;
+    font-size: 11px;
+    font-family: "JetBrains Mono", monospace;
+    letter-spacing: 0.04em;
+    text-transform: lowercase;
+    color: var(--panel-text);
+  }
+  .toggle-group button.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+  }
+  .toggle-group button.active:hover { color: #ffffff; }
+
+  .checkbox-row {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    font-size: 13px; cursor: pointer;
+    color: var(--panel-text);
+  }
+
+  .switch {
+    position: relative;
+    width: 36px; height: 20px;
+    background: var(--panel-border);
+    border-radius: 2px;
+    transition: background 0.18s ease;
+    cursor: pointer;
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 14px; height: 14px;
+    background: #ffffff;
+    border-radius: 1px;
+    border: 1px solid var(--panel-border);
+    transition: all 0.18s ease;
+  }
+  .switch.on { background: var(--accent); }
+  .switch.on::after { left: 19px; border-color: var(--accent); }
+
+  .cta {
+    background: #ffffff;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 2px;
+    font-size: 13px; font-weight: 500;
+    padding: 11px 14px;
+    cursor: pointer;
+    text-transform: lowercase;
+    letter-spacing: 0.01em;
+  }
+  .cta:hover { background: var(--accent); color: #ffffff; }
+
+  .cta.fault-cta { color: var(--fault); border-color: var(--fault); }
+  .cta.fault-cta:hover { background: var(--fault); color: #ffffff; }
+
+  .stats-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px; margin-top: 6px;
+  }
+  .stat {
+    border: 1px solid var(--panel-border);
+    padding: 8px 10px; border-radius: 2px;
+    text-align: left;
+  }
+  .stat-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px; text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--panel-muted);
+  }
+  .stat-value {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 16px; font-weight: 600;
+    color: var(--panel-text);
+    margin-top: 2px;
+  }
+  .stat.failed .stat-value { color: var(--fault); }
+  .stat.recovered .stat-value { color: var(--accent); }
+  .single-stat { margin-top: 6px; padding: 12px 14px; }
+  .single-stat .stat-value { font-size: 22px; }
+
+  .legend {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px; line-height: 1.7;
+    color: var(--panel-muted);
+    padding: 12px 14px;
+    background: #fafafa;
+    border: 1px solid var(--panel-border);
+    border-radius: 2px;
+    letter-spacing: 0.03em;
+  }
+  .legend .key {
+    color: var(--accent); font-weight: 600;
+    background: var(--accent-soft);
+    padding: 1px 5px; margin-right: 6px;
+  }
+
+  .footer-tag {
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid var(--panel-border);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    color: var(--panel-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .footer-tag strong { color: var(--panel-text); font-weight: 500; }
+
+  /* ---------- in-ASCII label chips ---------- */
+  .label-chip {
+    background: #ffffff;
+    color: var(--accent);
+    font-weight: 600;
+    text-shadow: none;          /* override the photographic bloom from #ascii */
+  }
+  .label-chip.fault {
+    background: var(--fault);
+    color: #ffffff;
+    text-shadow: none;
+    animation: chipPulse 0.8s ease-in-out infinite;
+  }
+  .label-chip.respawn {
+    background: var(--accent-on-dark);
+    color: #ffffff;
+    text-shadow: none;
+    animation: chipPulse 0.8s ease-in-out infinite;
+  }
+  @keyframes chipPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+
+  /* ---------- legend card (component key, bottom-right) ---------- */
+  #legend {
+    position: absolute;
+    bottom: 24px; right: 28px;
+    z-index: 2;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--panel-border);
+    padding: 14px 16px;
+    border-radius: 2px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px; line-height: 1.7;
+    color: var(--panel-text);
+    max-width: 240px;
+    transition: opacity 0.2s ease;
+  }
+  #legend.hidden { opacity: 0; pointer-events: none; }
+  #legend .legend-title {
+    font-size: 9px; text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--panel-muted);
+    margin-bottom: 8px;
+  }
+  #legend .legend-item {
+    display: grid; grid-template-columns: 92px 1fr;
+    gap: 10px; align-items: baseline;
+  }
+  #legend .legend-key { color: var(--accent); font-weight: 600; }
+  #legend .legend-desc { color: var(--panel-muted); }
+
+  /* responsive */
+  @media (max-width: 768px) {
+    #app {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr auto;
+    }
+    #panel {
+      border-left: none;
+      border-top: 1px solid var(--panel-border);
+      max-height: 50dvh;
+      padding: 20px 18px;
+    }
+    #overlay { top: 16px; left: 18px; max-width: 80%; gap: 6px; }
+    #headline { font-size: 18px; }
+    #fault-log {
+      top: 88px;
+      right: 14px;
+      width: 280px;
+      max-height: calc(100% - 200px);
+    }
+    .log-entry { font-size: 10.5px; padding: 6px 9px; }
+    #ledger {
+      bottom: 16px; left: 18px;
+      min-width: 0;
+      padding: 10px 14px;
+      max-width: calc(100% - 36px);
+    }
+    .ledger-amount { font-size: 19px; }
+    #legend { right: 18px; bottom: 16px; max-width: 180px; font-size: 9px; }
+    #fps { top: 16px; right: 18px; }
+  }
+
+  /* very narrow — phone portrait */
+  @media (max-width: 480px) {
+    #overlay { top: 14px; left: 14px; }
+    #headline { font-size: 15px; }
+    .brand-mark { font-size: 10px; }
+    #subtitle { font-size: 10px; }
+    #fault-log {
+      top: 70px;
+      right: 12px;
+      width: 220px;
+      max-height: calc(100% - 180px);
+    }
+    .log-entry { font-size: 10px; padding: 5px 8px; gap: 5px; }
+    .log-ts { font-size: 9px; }
+    .log-tag { font-size: 9px; }
+    #ledger {
+      bottom: 14px; left: 14px;
+      padding: 8px 12px;
+    }
+    .ledger-eyebrow { font-size: 8px; margin-bottom: 6px; }
+    .ledger-amount { font-size: 17px; }
+    .ledger-row { display: none; }   /* hide eng + compliance hrs on tiny screens */
+    .ledger-meta { font-size: 8px; }
+    #legend { display: none; }       /* component legend competes with ledger */
+    #fps { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="viewer">
+    <div id="fault-flash"></div>
+
+    <div id="overlay">
+      <div class="brand-mark"><span class="dot"></span>respawn · ai recovery engineer</div>
+      <h1 id="headline">can you recover? <em>yes or no.</em></h1>
+      <div id="subtitle">scenario: high availability — multi-az</div>
+    </div>
+
+    <div id="fps">0 fps</div>
+
+    <div id="fault-log" aria-live="polite"></div>
+
+    <div id="ledger">
+      <div class="ledger-eyebrow">respawn value delivered</div>
+      <div class="ledger-primary">
+        <span class="ledger-amount" id="ledger-dollars">$0</span>
+        <span class="ledger-label">downtime avoided</span>
+      </div>
+      <div class="ledger-row">
+        <div class="ledger-cell"><span id="ledger-eng">0</span> eng hrs saved</div>
+        <div class="ledger-cell"><span id="ledger-audit">0</span> compliance &amp; reporting hrs saved</div>
+      </div>
+      <div class="ledger-meta">
+        <span class="caught-count" id="ledger-caught">0</span> recovery kill chains caught
+      </div>
+    </div>
+
+    <pre id="ascii"></pre>
+
+    <div id="legend">
+      <div class="legend-title">components</div>
+      <div id="legend-items"></div>
+    </div>
+  </div>
+
+  <aside id="panel">
+    <div class="panel-header">
+      <span class="eyebrow">live render</span>
+      <h2>ai recovery engineer</h2>
+      <p>scans production for recovery kill chains, tests your recovery paths, delivers a ticket with the fix path. auto-remediation rolls out as your team builds trust.</p>
+    </div>
+
+    <div class="group">
+      <span class="group-label">scenario</span>
+      <select id="model-select">
+        <option value="ha">high availability — multi-az</option>
+        <option value="backup">restore from backup — cross-region dr</option>
+      </select>
+    </div>
+
+    <div class="group">
+      <span class="group-label">fault injection</span>
+      <div class="checkbox-row">
+        <span>auto-inject faults</span>
+        <div class="switch on" id="faults-toggle" role="switch" aria-checked="true"></div>
+      </div>
+      <div class="slider-row">
+        <span>cadence</span>
+        <span class="value" id="cadence-value">2s</span>
+      </div>
+      <input type="range" id="fault-cadence" min="0" max="15" value="2" />
+      <button id="trigger-fault" class="cta fault-cta">inject fault now</button>
+      <div class="stat recovered single-stat">
+        <div class="stat-label">recovery kill chains caught</div>
+        <div class="stat-value" id="panel-caught">0</div>
+      </div>
+    </div>
+
+    <div class="group">
+      <span class="group-label">value model</span>
+      <div class="slider-row">
+        <span>$ / minute downtime</span>
+        <span class="value" id="cpm-value">$5,600</span>
+      </div>
+      <input type="range" id="cost-per-min" min="500" max="20000" step="100" value="5600" />
+    </div>
+
+    <div class="group">
+      <span class="group-label">resolution</span>
+      <div class="slider-row">
+        <span>ascii columns</span>
+        <span class="value" id="res-value">260</span>
+      </div>
+      <input type="range" id="resolution" min="60" max="340" value="260" />
+    </div>
+
+    <div class="group">
+      <span class="group-label">character set</span>
+      <select id="charset-select">
+        <option value="detailed" selected>detailed — 70 chars</option>
+        <option value="blocks">blocks  ░▒▓█</option>
+        <option value="standard">standard  .:-=+*#%@</option>
+        <option value="binary">binary  0 1</option>
+        <option value="dots">dots  · • ●</option>
+        <option value="respawn">respawn  yes / no</option>
+      </select>
+    </div>
+
+    <div class="group">
+      <span class="group-label">color</span>
+      <div class="toggle-group">
+        <button data-color="white" class="active">white</button>
+        <button data-color="respawn">blue</button>
+        <button data-color="mono">mono</button>
+        <button data-color="full">full color</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <span class="group-label">display</span>
+      <div class="checkbox-row">
+        <span>show component labels</span>
+        <div class="switch on" id="labels-toggle" role="switch" aria-checked="true"></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <span class="group-label">camera</span>
+      <div class="checkbox-row">
+        <span>auto-rotate</span>
+        <div class="switch on" id="autorotate-toggle" role="switch" aria-checked="true"></div>
+      </div>
+      <div class="slider-row">
+        <span>rotation speed</span>
+        <span class="value" id="speed-value">0.25×</span>
+      </div>
+      <input type="range" id="rotation-speed" min="0" max="40" value="2.5" step="0.5" />
+      <button id="reset-camera" class="cta">reset view</button>
+    </div>
+
+    <div class="legend">
+      <div><span class="key">drag</span>rotate camera</div>
+      <div><span class="key">scroll</span>zoom in / out</div>
+      <div><span class="key">right-drag</span>pan</div>
+    </div>
+
+    <div class="footer-tag">
+      <strong>recovery as a state.</strong> not an assumption.
+    </div>
+  </aside>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.137.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ============================================================
+  // CONFIG
+  // ============================================================
+
+  const CHARSETS = {
+    standard: " .:-=+*#%@",
+    detailed: " .'`,^:\";~-_+<>i!lI?/\\|()1{}[]rcvunxzjftLCJUYXZO0Qoahkbdpqwm*WMB8&%$#@",
+    blocks:   " ░▒▓█",
+    binary:   " 01",
+    dots:     " ·•●",
+    respawn:  " .:nosyeyes#@"
+  };
+
+  const COLOR_PRESETS = {
+    white:   "#e6e6eb",
+    respawn: "#5b8def",
+    mono:    "#a4a8af",
+    full:    null
+  };
+
+  // 3D anchors for in-ASCII labels — placed right at each component's top edge
+  const LABELS_HA = [
+    { id: 'r53',         p: [0, 4.15, 0],      t: "[route 53]" },
+    { id: 'cf',          p: [0, 2.88, 0],      t: "[cloudfront]" },
+    { id: 'alb',         p: [0, 1.72, 0],      t: "[ALB]" },
+    { id: 'az1',         p: [-3.3, -1.1, 1.3], t: "[az-1]" },
+    { id: 'ec2_az1',     p: [-2.9, 0.55, 0.7], t: "[EC2]" },
+    { id: 'rds_primary', p: [-2.8, 1.0, -0.7], t: "[RDS·primary]" },
+    { id: 'az2',         p: [3.3, -1.1, 1.3],  t: "[az-2]" },
+    { id: 'ec2_az2',     p: [2.9, 0.55, 0.7],  t: "[EC2]" },
+    { id: 'rds_standby', p: [2.8, 1.0, -0.7],  t: "[RDS·standby]" },
+    { id: 's3',          p: [0, -0.25, -2.5],  t: "[S3]" }
+  ];
+
+  const LABELS_BACKUP = [
+    { id: 'r53',         p: [0, 3.55, 0],     t: "[route 53·failover]" },
+    { id: 'alb_primary', p: [-4, 1.82, 0],    t: "[ALB]" },
+    { id: 'ec2_primary', p: [-4.5, 0.55, 0.5], t: "[EC2]" },
+    { id: 'rds_primary', p: [-3, 1.0, -0.7],  t: "[RDS]" },
+    { id: 'snapshots',   p: [0, 1.98, 0],     t: "[snapshots]" },
+    { id: 'vault',       p: [0, 0.2, 0.78],   t: "[AWS·Backup]" },
+    { id: 's3_backup',   p: [0, 0.2, -2.5],   t: "[S3·backup]" },
+    { id: 'ec2_dr',      p: [4, 0.55, 0.5],   t: "[EC2·standby]" },
+    { id: 'rds_dr',      p: [5.4, 1.0, -0.7], t: "[RDS·restored]" },
+    { id: 'region_primary', p: [-4, -1.2, 2.0], t: "[primary]" },
+    { id: 'region_dr',      p: [4, -1.2, 2.0],  t: "[dr·region]" }
+  ];
+
+  const LEGEND_DATA = {
+    ha: {
+      title: "high availability · multi-az",
+      items: [
+        ["route 53",  "global dns"],
+        ["cloudfront","edge cache"],
+        ["ALB",       "load balancer"],
+        ["az-1 / az-2","availability zones"],
+        ["EC2",       "compute fleet"],
+        ["RDS",       "primary + standby"],
+        ["S3",        "shared assets"]
+      ]
+    },
+    backup: {
+      title: "restore from backup · cross-region",
+      items: [
+        ["route 53",   "failover dns"],
+        ["primary",    "active workload"],
+        ["AWS Backup", "vault + policy"],
+        ["snapshots",  "point-in-time"],
+        ["S3 backup",  "long-term store"],
+        ["dr region",  "restored standby"]
+      ]
+    }
+  };
+
+  // ============================================================
+  // FAULT LIBRARY — now with severity minutes
+  // ============================================================
+  const FAULTS_HA = [
+    { title: "route 53 health-check is stuck",          detail: "primary returns 200 to a synthetic endpoint while real users 502.", target: 'r53',         breaks: ['dns','edge','web-az1','web-az2','replication'], min: 120, why: "0% traffic reaches healthy az — failover never triggers." },
+    { title: "tls cert expired on the alb",              detail: "renewed in staging, *.api.production.com expired 9 hours ago.",     target: 'alb',         breaks: ['edge','web-az1','web-az2'],                       min: 90,  why: "alb rejecting tls handshake. every client sees ssl_error." },
+    { title: "security group rule revoked on rds:5432",  detail: "terraform drift removed web-tier → rds inbound rule.",              target: 'rds_primary', breaks: ['web-az1','web-az2'],                              min: 60,  why: "every db query times out. app returns 503." },
+    { title: "iam instance profile missing s3:PutObject",detail: "least-privilege migration removed write scope from app role.",      target: 'ec2_az1',     breaks: ['storage'],                                        min: 35,  why: "user uploads silently failing. no alarm wired." },
+    { title: "rotated db password not propagated to az-2",detail:"secrets manager updated, az-2 fleet still caching the old value.", target: 'ec2_az2',     breaks: ['web-az2'],                                        min: 45,  why: "half the fleet returns 500. classic split-brain." },
+    { title: "asg launch template references stale ami", detail: "ami deregistered after last hardening sweep.",                      target: 'ec2_az2',     breaks: ['web-az2'],                                        min: 40,  why: "no replacement instances spawning during scale event." },
+    { title: "rds standby in a different vpc",           detail: "vpc id drifted post-migration. promotion path untested.",           target: 'rds_standby', breaks: ['replication'],                                    min: 95,  why: "failover promotes successfully → app cannot reach it." },
+    { title: "kms key for s3 encryption disabled",       detail: "infra cleanup script deleted a key marked 'unused'.",               target: 's3',          breaks: ['storage'],                                        min: 75,  why: "every object read returns AccessDenied." },
+    { title: "cloudfront origin failover misrouted",     detail: "origin group lists a stale alb dns from a prior region migration.", target: 'cf',          breaks: ['edge'],                                           min: 65,  why: "cdn serves a 502 page to 100% of cached miss traffic." },
+    { title: "az-1 isolated by an aws control-plane event", detail: "ec2 api unreachable in az-1. existing instances run; replacements don't.", target: 'az1', breaks: ['web-az1'],                                  min: 50,  why: "alb shifts traffic to az-2 — capacity halved, latency spikes." }
+  ];
+
+  const FAULTS_BACKUP = [
+    { title: "backup vault encrypted with kms key only in primary", detail: "key never replicated to dr region.",                    target: 'vault',       breaks: ['archive','restore-ec2','restore-rds'], min: 240, why: "snapshots unreadable in failover region. classic region trap." },
+    { title: "restore role lacks ec2:RunInstances in dr account",   detail: "least-privilege role copied without cross-account trust.", target: 'ec2_dr',    breaks: ['restore-ec2'],                          min: 180, why: "compute never spawns. recovery script exits 1, no alert." },
+    { title: "the last 3 snapshots failed silently",                detail: "aws backup status: 'failed' for 11 days. no alarm.",     target: 'snapshots',   breaks: ['backup-rds','backup-ec2','archive'],   min: 1440, why: "most recent valid snapshot is 14 days old." },
+    { title: "secrets manager only exists in primary region",       detail: "app config (db url, api keys) never replicated.",        target: 'vault',       breaks: ['restore-ec2'],                          min: 130, why: "dr fleet boots, cannot decrypt config, crash-loops." },
+    { title: "vpc peering between regions not configured",          detail: "restored compute and restored db live in unconnected vpcs.", target: 'ec2_dr',  breaks: ['restore-ec2','restore-rds'],            min: 110, why: "restored app cannot reach restored db. tcp timeout." },
+    { title: "route 53 failover policy points to dead ip",          detail: "secondary record was a placeholder from migration day.", target: 'r53',         breaks: ['dns-failover'],                         min: 70,  why: "failover triggers. 100% of traffic into a black hole." },
+    { title: "param store restored to wrong env",                   detail: "dr restore pulled the staging parameter tree, not prod.", target: 'ec2_dr',    breaks: ['restore-ec2'],                          min: 55,  why: "app boots with staging db credentials. nothing logs in." },
+    { title: "missing rds option group in dr region",               detail: "custom option group never created in failover region.",  target: 'rds_dr',      breaks: ['restore-rds'],                          min: 105, why: "rds restore fails on engine configuration mismatch." },
+    { title: "iam role assumed by restore lambda lacks kms:Decrypt",detail: "rotated key policy never re-grants the role.",           target: 'vault',       breaks: ['restore-ec2','restore-rds'],            min: 70,  why: "every restored object 403s on first read." },
+    { title: "dr region cold start hit instance quota",             detail: "default ec2 quota in dr region was never raised.",      target: 'region_dr',   breaks: ['restore-ec2'],                          min: 720, why: "restore launches 4 of 24 instances. quota request: 2 days." }
+  ];
+
+  // ============================================================
+  // VALUE MODEL
+  // ============================================================
+  let COST_PER_MIN = 5600;             // $/min — Gartner ~$5,600/min enterprise downtime
+  const ENG_HRS_PER_FAULT = 4;         // engineering hours saved per kill chain caught
+  const AUDIT_HRS_PER_FAULT = 1;       // audit/evidence hours saved per validated path
+
+  // ============================================================
+  // STATE + DOM
+  // ============================================================
+
+  const viewerEl = document.getElementById("viewer");
+  const asciiEl  = document.getElementById("ascii");
+  const fpsEl    = document.getElementById("fps");
+  const modelSel = document.getElementById("model-select");
+  const resSlider = document.getElementById("resolution");
+  const resValue  = document.getElementById("res-value");
+  const charsetSel = document.getElementById("charset-select");
+  const autoToggle = document.getElementById("autorotate-toggle");
+  const speedSlider = document.getElementById("rotation-speed");
+  const speedValue  = document.getElementById("speed-value");
+  const resetBtn = document.getElementById("reset-camera");
+  const subtitleEl = document.getElementById("subtitle");
+  const colorButtons = document.querySelectorAll("[data-color]");
+  const labelsToggle = document.getElementById("labels-toggle");
+  const legendEl = document.getElementById("legend");
+  const legendItemsEl = document.getElementById("legend-items");
+
+  const faultsToggle = document.getElementById("faults-toggle");
+  const cadenceSlider = document.getElementById("fault-cadence");
+  const cadenceValue = document.getElementById("cadence-value");
+  const triggerFaultBtn = document.getElementById("trigger-fault");
+  const cpmSlider = document.getElementById("cost-per-min");
+  const cpmValue = document.getElementById("cpm-value");
+
+  const logContainerEl = document.getElementById("fault-log");
+  const flashEl = document.getElementById("fault-flash");
+
+  const MAX_LOG_ENTRIES = 7;
+  const LOG_ENTRY_TTL = 16000;
+  const LOG_FADE_DURATION = 700;
+  const logState = { entries: [] };
+
+  const ledgerDollarsEl = document.getElementById("ledger-dollars");
+  const ledgerEngEl = document.getElementById("ledger-eng");
+  const ledgerAuditEl = document.getElementById("ledger-audit");
+  const ledgerCaughtEl = document.getElementById("ledger-caught");
+  const panelCaught = document.getElementById("panel-caught");
+
+  // viewport-aware defaults
+  const IS_TOUCH = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  function pickDefaultCols() {
+    const w = window.innerWidth;
+    if (w < 480) return 110;
+    if (w < 768) return 150;
+    if (w < 1200) return 210;
+    return 260;
+  }
+  function isMobileViewport() { return window.innerWidth < 768; }
+
+  const state = {
+    cols: pickDefaultCols(),
+    charset: CHARSETS.detailed,
+    color: "white",
+    autoRotate: true,
+    rotationSpeed: 0.25,
+    model: "ha",
+    showLabels: true
+  };
+
+  // ---------- fault state machine ----------
+  const PHASE_DUR = { inject: 1600, scan: 2000, patch: 1800, outcome: 3200 };
+
+  const fault = {
+    enabled: true,
+    cadenceMs: 2000,
+    active: null,
+    phase: null,            // 'inject' | 'scan' | 'patch' | 'outcome'
+    phaseStartedAt: 0,
+    outcome: null,          // 'patched' | 'killchain'
+    lastClearedAt: -Infinity,
+    pendingTrigger: false,
+    counts: { caught: 0 }
+  };
+
+  const ledger = {
+    minutes: 0,
+    dollars: 0,
+    eng: 0,
+    audit: 0,
+    displayed: { dollars: 0, eng: 0, audit: 0 }
+  };
+
+  // ============================================================
+  // THREE.JS
+  // ============================================================
+
+  const scene = new THREE.Scene();
+  scene.background = null;
+
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+  const initialCameraPos = new THREE.Vector3(6.5, 5, 10);
+
+  function setCameraForViewport() {
+    const w = viewerEl.clientWidth, h = viewerEl.clientHeight;
+    const aspect = w / (h || 1);
+    if (aspect < 0.85) {
+      // tall + narrow (phone portrait) — pull back, widen FOV
+      camera.fov = 54;
+      initialCameraPos.set(0, 5, 14);
+    } else if (aspect < 1.3) {
+      // squarish (tablet / phone landscape)
+      camera.fov = 44;
+      initialCameraPos.set(4, 5, 11);
+    } else {
+      // wide (desktop)
+      camera.fov = 38;
+      initialCameraPos.set(6.5, 5, 10);
+    }
+    camera.position.copy(initialCameraPos);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+  }
+  setCameraForViewport();
+
+  const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(1);
+  renderer.setSize(400, 200, false);
+  renderer.domElement.style.display = "none";
+  viewerEl.appendChild(renderer.domElement);
+
+  const controls = new THREE.OrbitControls(camera, viewerEl);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minDistance = 4;
+  controls.maxDistance = 30;
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.42));
+  const keyLight = new THREE.DirectionalLight(0xffffff, 0.95);
+  keyLight.position.set(6, 10, 8);
+  scene.add(keyLight);
+  const rim = new THREE.DirectionalLight(0x6a8eff, 0.45);
+  rim.position.set(-8, 4, -6);
+  scene.add(rim);
+
+  const COLOR = {
+    structure:  0xe6e6eb,
+    structureD: 0xa4a8af,
+    edge:       0xffffff,
+    accent:     0x5b8def,
+    storage:    0x3f3c39,
+    backup:     0x2b2926,
+    region:     0x141317,
+    azFloor:    0x1f2230,
+    fault:      0xff2c2c
+  };
+
+  function box(w, h, d, color, opts = {}) {
+    const g = new THREE.BoxGeometry(w, h, d);
+    const m = new THREE.MeshStandardMaterial({ color, metalness: 0.15, roughness: 0.6, emissive: 0x000000, emissiveIntensity: 0 });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: opts.edgeColor || COLOR.edge })));
+    return mesh;
+  }
+  function cylinder(r, h, color, segs = 16, opts = {}) {
+    const g = new THREE.CylinderGeometry(r, r, h, segs);
+    const m = new THREE.MeshStandardMaterial({ color, metalness: 0.15, roughness: 0.6, emissive: 0x000000, emissiveIntensity: 0 });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: opts.edgeColor || COLOR.edge })));
+    return mesh;
+  }
+  function dbCylinder(color) {
+    const group = new THREE.Group();
+    for (let i = 0; i < 3; i++) {
+      const c = cylinder(0.55, 0.18, color, 24);
+      c.position.y = -0.4 + i * 0.4;
+      group.add(c);
+    }
+    const body = cylinder(0.55, 1.0, color, 24);
+    body.material.transparent = true;
+    body.material.opacity = 0.35;
+    group.add(body);
+    return group;
+  }
+  function connectorLine(from, to, color) {
+    const g = new THREE.BufferGeometry().setFromPoints([from, to]);
+    const m = new THREE.LineDashedMaterial({ color, dashSize: 0.2, gapSize: 0.1, linewidth: 1 });
+    const line = new THREE.Line(g, m);
+    line.computeLineDistances();
+    return line;
+  }
+  function regionFloor(w, d, color, y = -1.3, edgeColor = 0x6a8eff) {
+    const g = new THREE.BoxGeometry(w, 0.06, d);
+    const m = new THREE.MeshStandardMaterial({ color, metalness: 0.05, roughness: 0.9, transparent: true, opacity: 0.55 });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.position.y = y;
+    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: edgeColor })));
+    return mesh;
+  }
+
+  function createCtx(root) {
+    const components = new Map();
+    const connectors = [];
+    return {
+      components, connectors, root,
+      reg(id, obj) {
+        const mats = [];
+        const baseColors = [];
+        obj.traverse(o => {
+          if (o.isMesh && o.material && o.material.emissive) {
+            mats.push(o.material);
+            baseColors.push(o.material.color.getHex());
+          }
+        });
+        components.set(id, { obj, mats, baseColors });
+        return obj;
+      },
+      con(from, to, color, tag) {
+        const line = connectorLine(from, to, color);
+        root.add(line);
+        connectors.push({ line, baseColor: color, tag });
+        return line;
+      }
+    };
+  }
+
+  function buildHA() {
+    const root = new THREE.Group();
+    const ctx = createCtx(root);
+
+    root.add(regionFloor(11, 7, COLOR.region));
+
+    const r53 = ctx.reg('r53', box(0.9, 0.9, 0.9, COLOR.structure));    r53.position.set(0, 3.6, 0); root.add(r53);
+    const cf = ctx.reg('cf', box(1.2, 0.6, 1.2, COLOR.structure));      cf.position.set(0, 2.5, 0);  root.add(cf);
+    const alb = ctx.reg('alb', box(4, 0.5, 0.9, COLOR.structureD));     alb.position.set(0, 1.4, 0); root.add(alb);
+
+    const az1Floor = regionFloor(4, 3, COLOR.azFloor, -1.2, COLOR.accent); az1Floor.position.x = -2.8; root.add(ctx.reg('az1', az1Floor));
+    const ec2Az1 = new THREE.Group();
+    for (let i = 0; i < 3; i++) { const e = box(0.7, 0.7, 0.7, COLOR.structure); e.position.set(-3.8 + i * 0.9, 0.1, 0.7); ec2Az1.add(e); }
+    root.add(ctx.reg('ec2_az1', ec2Az1));
+    const rdsP = ctx.reg('rds_primary', dbCylinder(COLOR.structure));   rdsP.position.set(-2.8, 0.4, -0.7); root.add(rdsP);
+
+    const az2Floor = regionFloor(4, 3, COLOR.azFloor, -1.2, COLOR.accent); az2Floor.position.x = 2.8; root.add(ctx.reg('az2', az2Floor));
+    const ec2Az2 = new THREE.Group();
+    for (let i = 0; i < 3; i++) { const e = box(0.7, 0.7, 0.7, COLOR.structure); e.position.set(1.8 + i * 0.9, 0.1, 0.7); ec2Az2.add(e); }
+    root.add(ctx.reg('ec2_az2', ec2Az2));
+    const rdsS = ctx.reg('rds_standby', dbCylinder(COLOR.structureD)); rdsS.position.set(2.8, 0.4, -0.7); root.add(rdsS);
+
+    const s3 = ctx.reg('s3', cylinder(0.7, 0.7, COLOR.storage, 6)); s3.position.set(0, -0.7, -2.5); root.add(s3);
+
+    ctx.con(new THREE.Vector3(0, 3.2, 0),     new THREE.Vector3(0, 2.8, 0),     COLOR.accent, 'dns');
+    ctx.con(new THREE.Vector3(0, 2.2, 0),     new THREE.Vector3(0, 1.65, 0),    COLOR.accent, 'edge');
+    ctx.con(new THREE.Vector3(-1.5, 1.15, 0), new THREE.Vector3(-3, 0.5, 0.7),  COLOR.accent, 'web-az1');
+    ctx.con(new THREE.Vector3(1.5, 1.15, 0),  new THREE.Vector3(3, 0.5, 0.7),   COLOR.accent, 'web-az2');
+    ctx.con(new THREE.Vector3(-2.8, 0, -0.7), new THREE.Vector3(2.8, 0, -0.7),  0xffffff, 'replication');
+    ctx.con(new THREE.Vector3(-2.8, -0.2, -0.7), new THREE.Vector3(0, -0.7, -2.3), 0xffffff, 'storage');
+    ctx.con(new THREE.Vector3(2.8, -0.2, -0.7),  new THREE.Vector3(0, -0.7, -2.3), 0xffffff, 'storage');
+
+    return { root, components: ctx.components, connectors: ctx.connectors };
+  }
+
+  function buildBackup() {
+    const root = new THREE.Group();
+    const ctx = createCtx(root);
+
+    const primary = regionFloor(5, 5, COLOR.region, -1.3, COLOR.accent); primary.position.x = -4; root.add(ctx.reg('region_primary', primary));
+    const dr = regionFloor(5, 5, COLOR.region, -1.3, 0x6a8eff);          dr.position.x = 4;       root.add(ctx.reg('region_dr', dr));
+
+    const ec2Primary = new THREE.Group();
+    for (let i = 0; i < 4; i++) {
+      const e = box(0.6, 0.6, 0.6, COLOR.structure);
+      const col = i % 2; const row = Math.floor(i / 2);
+      e.position.set(-5 + col * 0.9, 0.1, -0.7 + row * 0.9);
+      ec2Primary.add(e);
+    }
+    root.add(ctx.reg('ec2_primary', ec2Primary));
+    const rdsP = ctx.reg('rds_primary', dbCylinder(COLOR.structure)); rdsP.position.set(-3, 0.4, -0.7); root.add(rdsP);
+    const albP = ctx.reg('alb_primary', box(2.2, 0.4, 0.7, COLOR.structureD)); albP.position.set(-4, 1.5, 0); root.add(albP);
+
+    const vault = ctx.reg('vault', box(1.4, 1.6, 1.4, COLOR.backup)); vault.position.set(0, 0.2, 0); root.add(vault);
+    const lid = box(1.5, 0.15, 1.5, COLOR.accent); lid.position.set(0, 1.1, 0); root.add(lid);
+
+    const snapStack = new THREE.Group();
+    for (let i = 0; i < 4; i++) { const s = box(0.9, 0.06, 0.9, COLOR.structureD); s.position.set(0, 1.4 + i * 0.12, 0); snapStack.add(s); }
+    root.add(ctx.reg('snapshots', snapStack));
+
+    const s3 = ctx.reg('s3_backup', cylinder(0.8, 0.9, COLOR.storage, 6)); s3.position.set(0, -0.3, -2.5); root.add(s3);
+
+    const ec2Dr = new THREE.Group();
+    for (let i = 0; i < 4; i++) {
+      const e = box(0.6, 0.6, 0.6, COLOR.structureD, { edgeColor: 0x6a8eff });
+      const col = i % 2; const row = Math.floor(i / 2);
+      e.position.set(3.4 + col * 0.9, 0.1, -0.7 + row * 0.9);
+      e.material.opacity = 0.65; e.material.transparent = true;
+      ec2Dr.add(e);
+    }
+    root.add(ctx.reg('ec2_dr', ec2Dr));
+    const rdsDR = ctx.reg('rds_dr', dbCylinder(COLOR.structureD)); rdsDR.position.set(5.4, 0.4, -0.7); root.add(rdsDR);
+
+    const r53 = ctx.reg('r53', box(0.9, 0.9, 0.9, COLOR.structure)); r53.position.set(0, 3, 0); root.add(r53);
+
+    ctx.con(new THREE.Vector3(-3, 0.4, -0.7), new THREE.Vector3(-0.7, 0.2, 0), COLOR.accent, 'backup-rds');
+    ctx.con(new THREE.Vector3(-4, 0.1, 0.5),  new THREE.Vector3(-0.7, 0.2, 0.3), COLOR.accent, 'backup-ec2');
+    ctx.con(new THREE.Vector3(0, 0.2, -0.7),  new THREE.Vector3(0, -0.3, -2.3), 0xffffff, 'archive');
+    ctx.con(new THREE.Vector3(0.7, 0.2, 0),   new THREE.Vector3(3.5, 0.4, -0.7), 0xffffff, 'restore-ec2');
+    ctx.con(new THREE.Vector3(0.7, 0.2, 0),   new THREE.Vector3(5.4, 0.4, -0.7), 0xffffff, 'restore-rds');
+    ctx.con(new THREE.Vector3(-0.2, 2.7, 0),  new THREE.Vector3(-4, 1.8, 0),    COLOR.accent, 'dns-primary');
+    ctx.con(new THREE.Vector3(0.2, 2.7, 0),   new THREE.Vector3(4, 1.8, 0),     0x6a8eff, 'dns-failover');
+
+    return { root, components: ctx.components, connectors: ctx.connectors };
+  }
+
+  // ============================================================
+  // MODEL SWAP
+  // ============================================================
+  let currentModel = null;
+  let currentComponents = new Map();
+  let currentConnectors = [];
+  let currentLabels = [];
+  let currentFaults = FAULTS_HA;
+
+  function setModel(name) {
+    finalizeFault(true);
+    clearLog();
+
+    if (currentModel) {
+      scene.remove(currentModel);
+      currentModel.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+          if (Array.isArray(o.material)) o.material.forEach(m => m.dispose());
+          else o.material.dispose();
+        }
+      });
+    }
+
+    const built = name === "ha" ? buildHA() : buildBackup();
+    currentModel = built.root;
+    currentComponents = built.components;
+    currentConnectors = built.connectors;
+    scene.add(currentModel);
+
+    state.model = name;
+    currentFaults = name === "ha" ? FAULTS_HA : FAULTS_BACKUP;
+
+    const raw = name === "ha" ? LABELS_HA : LABELS_BACKUP;
+    currentLabels = raw.map(l => ({ id: l.id, pos: new THREE.Vector3(l.p[0], l.p[1], l.p[2]), text: l.t }));
+
+    updateLegend(name);
+    subtitleEl.textContent = "scenario: " + (name === "ha"
+      ? "high availability — multi-az"
+      : "restore from backup — cross-region dr");
+  }
+
+  function updateLegend(name) {
+    const meta = LEGEND_DATA[name];
+    if (!meta) return;
+    legendItemsEl.innerHTML = meta.items.map(([k, v]) =>
+      `<div class="legend-item"><span class="legend-key">[${k}]</span><span class="legend-desc">${v}</span></div>`
+    ).join("");
+    legendEl.querySelector(".legend-title").textContent = meta.title;
+    updateLegendVisibility();
+  }
+
+  function updateLegendVisibility() {
+    const hide = !state.showLabels || state.cols < 70;
+    legendEl.classList.toggle("hidden", hide);
+  }
+
+  // ============================================================
+  // FAULT STATE MACHINE
+  // ============================================================
+
+  function pickFault() {
+    return currentFaults[Math.floor(Math.random() * currentFaults.length)];
+  }
+
+  function setComponentMode(id, mode) {
+    const c = currentComponents.get(id);
+    if (!c) return;
+    if (mode === 'normal') {
+      c.mats.forEach((m, i) => {
+        m.color.setHex(c.baseColors[i] ?? 0xffffff);
+        m.emissive.setHex(0x000000);
+        m.emissiveIntensity = 0;
+      });
+    } else {
+      const hex = mode === 'fault' ? COLOR.fault : COLOR.accent;
+      c.mats.forEach(m => {
+        m.color.setHex(hex);
+        m.emissive.setHex(hex);
+        m.emissiveIntensity = mode === 'patch' ? 0.7 : 0.45;
+      });
+    }
+  }
+
+  function setConnectorsMode(tags, mode) {
+    const hex = mode === 'fault' ? COLOR.fault : (mode === 'respawn' ? COLOR.accent : null);
+    for (const c of currentConnectors) {
+      if (!tags || tags.includes(c.tag)) {
+        c.line.material.color.setHex(hex === null ? c.baseColor : hex);
+      } else if (mode === 'restore') {
+        c.line.material.color.setHex(c.baseColor);
+      }
+    }
+  }
+
+  function restoreAll() {
+    for (const [id, c] of currentComponents.entries()) {
+      c.mats.forEach((m, i) => {
+        m.color.setHex(c.baseColors[i] ?? 0xffffff);
+        m.emissive.setHex(0x000000);
+        m.emissiveIntensity = 0;
+      });
+    }
+    for (const c of currentConnectors) c.line.material.color.setHex(c.baseColor);
+  }
+
+  function startFault(f) {
+    fault.active = f;
+    fault.phase = 'inject';
+    fault.phaseStartedAt = performance.now();
+    fault.outcome = null;
+    enterInject();
+  }
+
+  function advancePhase() {
+    const now = performance.now();
+    if (fault.phase === 'inject')  { fault.phase = 'scan';    fault.phaseStartedAt = now; enterScan(); }
+    else if (fault.phase === 'scan')  { fault.phase = 'patch';   fault.phaseStartedAt = now; enterPatch(); }
+    else if (fault.phase === 'patch') { fault.phase = 'outcome'; fault.phaseStartedAt = now; decideOutcome(); enterOutcome(); }
+    else if (fault.phase === 'outcome') { finalizeFault(false); }
+  }
+
+  function decideOutcome() {
+    // every fault is a kill chain — respawn catches it and delivers a ticket
+    fault.outcome = 'caught';
+    incrementLedger();
+  }
+
+  // ---------- log feed ----------
+  function timestamp() {
+    const d = new Date();
+    return String(d.getHours()).padStart(2, '0') + ':' +
+           String(d.getMinutes()).padStart(2, '0') + ':' +
+           String(d.getSeconds()).padStart(2, '0');
+  }
+
+  function pushLog(phase, tag, text) {
+    const el = document.createElement('div');
+    el.className = 'log-entry log-' + phase;
+
+    const tsEl = document.createElement('span');
+    tsEl.className = 'log-ts';
+    tsEl.textContent = timestamp();
+
+    const tagEl = document.createElement('span');
+    tagEl.className = 'log-tag';
+    tagEl.textContent = '[' + tag + ']';
+
+    const textEl = document.createElement('span');
+    textEl.className = 'log-text';
+    textEl.textContent = text;
+
+    el.appendChild(tsEl);
+    el.appendChild(tagEl);
+    el.appendChild(textEl);
+    logContainerEl.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+
+    const entry = { el, bornAt: performance.now(), fading: false };
+    logState.entries.push(entry);
+
+    while (logState.entries.length > MAX_LOG_ENTRIES) {
+      const oldest = logState.entries.shift();
+      fadeRemove(oldest);
+    }
+  }
+
+  function fadeRemove(entry) {
+    if (entry.fading) return;
+    entry.fading = true;
+    entry.el.classList.add('fade');
+    setTimeout(() => { if (entry.el.parentNode) entry.el.remove(); }, LOG_FADE_DURATION + 50);
+  }
+
+  function tickLog(now) {
+    for (let i = logState.entries.length - 1; i >= 0; i--) {
+      const e = logState.entries[i];
+      if (!e.fading && now - e.bornAt > LOG_ENTRY_TTL) {
+        logState.entries.splice(i, 1);
+        fadeRemove(e);
+      }
+    }
+  }
+
+  function clearLog() {
+    for (const e of logState.entries) {
+      if (e.el && e.el.parentNode) e.el.remove();
+    }
+    logState.entries = [];
+  }
+
+  // ---------- phase enter functions ----------
+  function enterInject() {
+    const f = fault.active;
+    pushLog('fault', 'DETECTED', f.title);
+    flashEl.className = 'fault';
+    setComponentMode(f.target, 'fault');
+    setConnectorsMode(f.breaks, 'fault');
+  }
+
+  function enterScan() {
+    const f = fault.active;
+    pushLog('scan', 'TEST', 'respawn replayed recovery path on ' + f.target);
+    flashEl.className = 'respawn';
+    setComponentMode(f.target, 'scan');
+    setConnectorsMode(f.breaks, 'respawn');
+  }
+
+  function enterPatch() {
+    const f = fault.active;
+    pushLog('draft', 'DRAFT', f.detail + ' — fix path drafted');
+    setComponentMode(f.target, 'patch');
+  }
+
+  function enterOutcome() {
+    const f = fault.active;
+    const dollars = f.min * COST_PER_MIN;
+    pushLog('caught', 'DELIVERED', 'ticket sent · ' + formatDollars(dollars) + ' downtime avoided · ' + ENG_HRS_PER_FAULT + ' eng hrs · ' + AUDIT_HRS_PER_FAULT + ' compliance & reporting hr saved');
+    flashEl.className = 'recovered';
+    restoreAll();
+  }
+
+  function finalizeFault(silent) {
+    if (!fault.active && !silent) return;
+    restoreAll();
+    fault.active = null;
+    fault.phase = null;
+    fault.outcome = null;
+    fault.lastClearedAt = performance.now();
+    flashEl.className = '';
+  }
+
+  function tickFault(now) {
+    if (fault.pendingTrigger) {
+      fault.pendingTrigger = false;
+      if (fault.active) finalizeFault(true);
+      startFault(pickFault());
+      return;
+    }
+
+    if (!fault.active) {
+      if (!fault.enabled) return;
+      if (now - fault.lastClearedAt >= fault.cadenceMs) startFault(pickFault());
+      return;
+    }
+
+    const elapsed = now - fault.phaseStartedAt;
+    const target = currentComponents.get(fault.active.target);
+    if (target) {
+      // emissive pulse per phase
+      let p;
+      if (fault.phase === 'inject')      p = 0.4 + 0.4 * (0.5 + 0.5 * Math.sin(elapsed * 0.008));
+      else if (fault.phase === 'scan')   p = 0.4 + 0.5 * (0.5 + 0.5 * Math.sin(elapsed * 0.012));
+      else if (fault.phase === 'patch')  p = 0.65;
+      else if (fault.phase === 'outcome') p = fault.outcome === 'patched' ? 0.4 * Math.max(0, 1 - elapsed / 1500) : 0.55;
+      if (p !== undefined) target.mats.forEach(m => { m.emissiveIntensity = p; });
+    }
+
+    if (elapsed >= PHASE_DUR[fault.phase]) advancePhase();
+  }
+
+  // ============================================================
+  // VALUE LEDGER
+  // ============================================================
+
+  function formatDollars(n) {
+    if (n >= 1_000_000) return '$' + (n / 1_000_000).toFixed(n >= 10_000_000 ? 1 : 2) + 'M';
+    if (n >= 10_000)    return '$' + Math.round(n / 1000) + 'K';
+    if (n >= 1_000)     return '$' + (n / 1000).toFixed(1) + 'K';
+    return '$' + Math.round(n);
+  }
+
+  function formatInt(n) { return Math.round(n).toLocaleString('en-US'); }
+
+  function incrementLedger() {
+    const f = fault.active;
+    const minutes = f.min;
+    ledger.minutes += minutes;
+    ledger.dollars += minutes * COST_PER_MIN;
+    ledger.eng += ENG_HRS_PER_FAULT;
+    ledger.audit += AUDIT_HRS_PER_FAULT;
+    fault.counts.caught++;
+    panelCaught.textContent = fault.counts.caught;
+    ledgerCaughtEl.textContent = fault.counts.caught;
+    animateLedger();
+  }
+
+  const anim = {};
+  function animateNumber(key, el, target, duration, formatter) {
+    if (anim[key]) cancelAnimationFrame(anim[key]);
+    const from = ledger.displayed[key];
+    const start = performance.now();
+    const step = () => {
+      const t = Math.min(1, (performance.now() - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const v = from + (target - from) * eased;
+      ledger.displayed[key] = v;
+      el.textContent = formatter(v);
+      if (t < 1) anim[key] = requestAnimationFrame(step);
+    };
+    anim[key] = requestAnimationFrame(step);
+  }
+
+  function animateLedger() {
+    animateNumber('dollars', ledgerDollarsEl, ledger.dollars, 1100, formatDollars);
+    animateNumber('eng', ledgerEngEl, ledger.eng, 900, formatInt);
+    animateNumber('audit', ledgerAuditEl, ledger.audit, 900, formatInt);
+  }
+
+  function recomputeLedgerDollars() {
+    // when cost/min slider changes, re-derive dollar total from minutes
+    ledger.dollars = ledger.minutes * COST_PER_MIN;
+    animateNumber('dollars', ledgerDollarsEl, ledger.dollars, 600, formatDollars);
+  }
+
+  // ============================================================
+  // ASCII CONVERSION
+  // ============================================================
+
+  const sampleCanvas = document.createElement("canvas");
+  const sampleCtx = sampleCanvas.getContext("2d", { willReadFrequently: true });
+
+  function getRows(cols) {
+    const aspect = viewerEl.clientWidth / viewerEl.clientHeight;
+    return Math.max(8, Math.round(cols / aspect / 2));
+  }
+
+  const tmpVec = new THREE.Vector3();
+  let gridChars = null, gridLabel = null, gridR = null, gridG = null, gridB = null;
+
+  function ensureGridBuffers(size) {
+    if (!gridChars || gridChars.length !== size) {
+      gridChars = new Array(size);
+      gridLabel = new Uint8Array(size);  // 0 plain, 1 normal label, 2 fault label, 3 respawn label
+      gridR = new Uint8Array(size);
+      gridG = new Uint8Array(size);
+      gridB = new Uint8Array(size);
+    }
+  }
+
+  function updateAscii() {
+    const cols = state.cols;
+    const rows = getRows(cols);
+
+    sampleCanvas.width = cols;
+    sampleCanvas.height = rows;
+
+    const mobile = isMobileViewport();
+    const renderW = Math.min(mobile ? 800 : 1600, cols * 4);
+    const renderH = Math.min(mobile ? 400 : 800, rows * 4);
+    if (renderer.domElement.width !== renderW || renderer.domElement.height !== renderH) {
+      renderer.setSize(renderW, renderH, false);
+      camera.aspect = renderW / renderH;
+      camera.updateProjectionMatrix();
+    }
+
+    renderer.render(scene, camera);
+    sampleCtx.drawImage(renderer.domElement, 0, 0, cols, rows);
+    const data = sampleCtx.getImageData(0, 0, cols, rows).data;
+
+    const chars = state.charset;
+    const lastIdx = chars.length - 1;
+    const fullColor = state.color === "full";
+
+    const size = rows * cols;
+    ensureGridBuffers(size);
+    gridLabel.fill(0);
+
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const cellIdx = y * cols + x;
+        const i = cellIdx * 4;
+        const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+        let ch;
+        if (a < 8) ch = " ";
+        else {
+          const brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+          const idx = Math.max(0, Math.min(lastIdx, Math.floor(brightness * lastIdx + 0.001)));
+          ch = chars[idx] || " ";
+        }
+        gridChars[cellIdx] = ch;
+        gridR[cellIdx] = r; gridG[cellIdx] = g; gridB[cellIdx] = b;
+      }
+    }
+
+    const labelsVisible = state.showLabels && cols >= 70 && currentLabels.length && currentModel;
+    if (labelsVisible) {
+      currentModel.updateMatrixWorld();
+      const activeTarget = fault.active ? fault.active.target : null;
+      const phase = fault.phase;
+      const outcome = fault.outcome;
+
+      for (const lbl of currentLabels) {
+        tmpVec.copy(lbl.pos).applyMatrix4(currentModel.matrixWorld).project(camera);
+        if (tmpVec.z < -1 || tmpVec.z > 1) continue;
+        const cx = Math.round((tmpVec.x + 1) * 0.5 * cols);
+        const cy = Math.round((1 - tmpVec.y) * 0.5 * rows);
+        if (cy < 0 || cy >= rows) continue;
+
+        let text = lbl.text;
+        let flag = 1;
+        if (activeTarget === lbl.id) {
+          if (phase === 'inject') { text = "[!" + lbl.text.slice(1); flag = 2; }
+          else if (phase === 'scan')    { text = "[?" + lbl.text.slice(1); flag = 3; }
+          else if (phase === 'patch')   { text = "[→" + lbl.text.slice(1); flag = 3; }
+          else if (phase === 'outcome') { text = "[+" + lbl.text.slice(1); flag = 3; }
+        }
+
+        const start = cx - Math.floor(text.length / 2);
+        for (let i = 0; i < text.length; i++) {
+          const x = start + i;
+          if (x < 0 || x >= cols) continue;
+          const cellIdx = cy * cols + x;
+          gridChars[cellIdx] = text[i];
+          gridLabel[cellIdx] = flag;
+        }
+      }
+    }
+
+    // serialize with span coalescing
+    let out = "";
+    for (let y = 0; y < rows; y++) {
+      let line = "";
+      let mode = 0;
+      let runColor = "";
+      let runText = "";
+
+      const flush = () => {
+        if (runText.length === 0) return;
+        if (mode === 1) line += `<span class="label-chip">${escapeStr(runText)}</span>`;
+        else if (mode === 2) line += `<span class="label-chip fault">${escapeStr(runText)}</span>`;
+        else if (mode === 3) line += `<span class="label-chip respawn">${escapeStr(runText)}</span>`;
+        else if (mode === 4) line += `<span style="color:${runColor}">${escapeStr(runText)}</span>`;
+        else line += escapeStr(runText);
+        runText = "";
+      };
+
+      for (let x = 0; x < cols; x++) {
+        const cellIdx = y * cols + x;
+        const flag = gridLabel[cellIdx];
+        let cellMode, cellColor = "";
+        if (flag === 1) cellMode = 1;
+        else if (flag === 2) cellMode = 2;
+        else if (flag === 3) cellMode = 3;
+        else if (fullColor) {
+          cellMode = 4;
+          cellColor = `rgb(${gridR[cellIdx]},${gridG[cellIdx]},${gridB[cellIdx]})`;
+        } else cellMode = 0;
+
+        if (cellMode !== mode || cellColor !== runColor) {
+          flush();
+          mode = cellMode;
+          runColor = cellColor;
+        }
+        runText += gridChars[cellIdx];
+      }
+      flush();
+      out += line + "\n";
+    }
+    asciiEl.innerHTML = out;
+  }
+
+  function escapeStr(s) {
+    let out = "";
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if (c === 60) out += "&lt;";
+      else if (c === 62) out += "&gt;";
+      else if (c === 38) out += "&amp;";
+      else out += s[i];
+    }
+    return out;
+  }
+
+  function fitAscii() {
+    const cols = state.cols;
+    const rows = getRows(cols);
+    const w = viewerEl.clientWidth, h = viewerEl.clientHeight;
+    const cellW = w / cols, cellH = h / rows;
+    const fontByW = cellW / 0.6;
+    const fontByH = cellH / 1.0;
+    const fontSize = Math.max(4, Math.min(fontByW, fontByH));
+    asciiEl.style.fontSize = fontSize + "px";
+  }
+
+  // ============================================================
+  // MAIN TICK
+  // ============================================================
+
+  let lastFrame = performance.now();
+  let frames = 0, fpsTimer = 0;
+
+  function tick() {
+    requestAnimationFrame(tick);
+    const now = performance.now();
+    const dt = (now - lastFrame) / 1000;
+    lastFrame = now;
+
+    if (state.autoRotate && currentModel) {
+      currentModel.rotation.y += dt * state.rotationSpeed * 0.4;
+    }
+    tickFault(now);
+    tickLog(now);
+    controls.update();
+    updateAscii();
+
+    frames++;
+    fpsTimer += dt;
+    if (fpsTimer >= 0.5) {
+      fpsEl.textContent = Math.round(frames / fpsTimer) + " fps · " + state.cols + "×" + getRows(state.cols);
+      frames = 0; fpsTimer = 0;
+    }
+  }
+
+  // ============================================================
+  // EVENTS
+  // ============================================================
+
+  modelSel.addEventListener("change", (e) => setModel(e.target.value));
+
+  resSlider.addEventListener("input", (e) => {
+    state.cols = parseInt(e.target.value, 10);
+    resValue.textContent = state.cols;
+    fitAscii();
+    updateLegendVisibility();
+  });
+
+  labelsToggle.addEventListener("click", () => {
+    state.showLabels = !state.showLabels;
+    labelsToggle.classList.toggle("on", state.showLabels);
+    labelsToggle.setAttribute("aria-checked", String(state.showLabels));
+    updateLegendVisibility();
+  });
+
+  charsetSel.addEventListener("change", (e) => {
+    state.charset = CHARSETS[e.target.value] || CHARSETS.standard;
+  });
+
+  colorButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+      colorButtons.forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      state.color = btn.dataset.color;
+      const preset = COLOR_PRESETS[state.color];
+      asciiEl.style.color = preset || "";
+    });
+  });
+
+  autoToggle.addEventListener("click", () => {
+    state.autoRotate = !state.autoRotate;
+    autoToggle.classList.toggle("on", state.autoRotate);
+    autoToggle.setAttribute("aria-checked", String(state.autoRotate));
+  });
+
+  speedSlider.addEventListener("input", (e) => {
+    state.rotationSpeed = parseInt(e.target.value, 10) / 10;
+    speedValue.textContent = state.rotationSpeed.toFixed(1) + "×";
+  });
+
+  resetBtn.addEventListener("click", () => {
+    camera.position.copy(initialCameraPos);
+    controls.target.set(0, 0, 0);
+    controls.update();
+    if (currentModel) currentModel.rotation.y = 0;
+  });
+
+  faultsToggle.addEventListener("click", () => {
+    fault.enabled = !fault.enabled;
+    faultsToggle.classList.toggle("on", fault.enabled);
+    faultsToggle.setAttribute("aria-checked", String(fault.enabled));
+    if (!fault.enabled && fault.active) finalizeFault(true);
+  });
+
+  cadenceSlider.addEventListener("input", (e) => {
+    const sec = parseInt(e.target.value, 10);
+    fault.cadenceMs = sec * 1000;
+    cadenceValue.textContent = sec + "s";
+  });
+
+  triggerFaultBtn.addEventListener("click", () => { fault.pendingTrigger = true; });
+
+  cpmSlider.addEventListener("input", (e) => {
+    COST_PER_MIN = parseInt(e.target.value, 10);
+    cpmValue.textContent = '$' + COST_PER_MIN.toLocaleString('en-US');
+    recomputeLedgerDollars();
+  });
+
+  const ro = new ResizeObserver(() => fitAscii());
+  ro.observe(viewerEl);
+  window.addEventListener("resize", fitAscii);
+
+  // ============================================================
+  // BOOT
+  // ============================================================
+  // sync slider DOM to the viewport-picked default
+  resSlider.value = state.cols;
+  resValue.textContent = state.cols;
+
+  // touch devices use pinch / two-finger — swap the hint legend
+  if (IS_TOUCH) {
+    const help = document.querySelector(".legend");
+    if (help) {
+      help.innerHTML =
+        '<div><span class="key">drag</span>rotate camera</div>' +
+        '<div><span class="key">pinch</span>zoom in / out</div>' +
+        '<div><span class="key">two-finger</span>pan</div>';
+    }
+  }
+
+  setModel("ha");
+  fitAscii();
+  // first fault fires after a short grace period
+  fault.lastClearedAt = performance.now() + 2500;
+  tick();
+})();
+</script>
+</body>
+</html>

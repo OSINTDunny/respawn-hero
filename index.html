@@ -9,9 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #020a0f;
-    --bg-grad-1: #1e1e28;
-    --bg-grad-2: #141317;
+    --bg: #ffffff;
     --panel: #ffffff;
     --panel-text: #2b2926;
     --panel-muted: #50565d;
@@ -20,11 +18,12 @@
     --stone-2: #a4a8af;
     --accent: #0000ee;
     --accent-soft: rgba(0, 0, 238, 0.08);
-    --accent-on-dark: #5b8def;
-    --accent-on-dark-soft: rgba(91, 141, 239, 0.18);
+    --accent-on-dark: #0000ee;          /* aliased to brand blue for light-mode reuse */
+    --accent-on-dark-soft: rgba(0, 0, 238, 0.08);
     --fault: #ff2c2c;
-    --fault-bg: rgba(255, 44, 44, 0.12);
-    --ascii-default: #e6e6eb;
+    --fault-bg: rgba(255, 44, 44, 0.08);
+    --dashed: rgba(43, 41, 38, 0.32);
+    --ascii-default: #2b2926;
   }
 
   * { box-sizing: border-box; }
@@ -41,18 +40,19 @@
   }
 
   #app {
-    display: grid;
-    grid-template-columns: 1fr 340px;
+    position: relative;
     width: 100%;
     height: 100vh;       /* fallback for older browsers */
     height: 100dvh;      /* fixes iOS Safari URL-bar viewport jump */
     min-height: 480px;
+    overflow: hidden;
   }
 
   /* ---------- viewer ---------- */
   #viewer {
-    position: relative;
-    background: radial-gradient(ellipse at center, var(--bg-grad-1) 0%, var(--bg-grad-2) 60%, var(--bg) 100%);
+    position: absolute;
+    inset: 0;
+    background: var(--bg);
     overflow: hidden;
     cursor: grab;
     user-select: none;
@@ -72,31 +72,24 @@
     text-align: left;
     pointer-events: none;
     color: var(--ascii-default);
-    /* photographic bloom — softens character edges so the ramp reads as continuous tone */
-    text-shadow:
-      0 0 1.2px currentColor,
-      0 0 4px rgba(91, 141, 239, 0.18),
-      0 0 8px rgba(91, 141, 239, 0.08);
   }
 
-  /* phase border flash */
+  /* phase border flash — subtle 1px inset, no glow, matches the site's clean aesthetic */
   #fault-flash {
     position: absolute; inset: 0;
     pointer-events: none;
-    box-shadow: inset 0 0 0 2px transparent;
+    box-shadow: inset 0 0 0 1px transparent;
     transition: box-shadow 0.18s ease, background 0.18s ease;
     z-index: 1;
   }
   #fault-flash.fault {
-    box-shadow: inset 0 0 0 2px var(--fault), inset 0 0 80px rgba(255, 44, 44, 0.18);
-    background: radial-gradient(ellipse at center, transparent 60%, rgba(255, 44, 44, 0.08) 100%);
+    box-shadow: inset 0 0 0 1px var(--fault);
+    background: linear-gradient(to bottom, rgba(255, 44, 44, 0.04), transparent 30%);
   }
-  #fault-flash.respawn {
-    box-shadow: inset 0 0 0 2px var(--accent-on-dark), inset 0 0 80px rgba(91, 141, 239, 0.22);
-    background: radial-gradient(ellipse at center, transparent 60%, rgba(91, 141, 239, 0.10) 100%);
-  }
+  #fault-flash.respawn,
   #fault-flash.recovered {
-    box-shadow: inset 0 0 0 2px var(--accent-on-dark), inset 0 0 60px rgba(91, 141, 239, 0.14);
+    box-shadow: inset 0 0 0 1px var(--accent);
+    background: linear-gradient(to bottom, rgba(0, 0, 238, 0.04), transparent 30%);
   }
 
   #overlay {
@@ -113,14 +106,13 @@
     display: flex; align-items: center; gap: 8px;
     font-family: "JetBrains Mono", monospace;
     font-size: 11px;
-    color: var(--stone-2);
+    color: var(--panel-text);
     letter-spacing: 0.04em;
   }
   .brand-mark .dot {
     width: 6px; height: 6px;
-    background: var(--accent-on-dark);
+    background: var(--accent);
     border-radius: 50%;
-    box-shadow: 0 0 8px var(--accent-on-dark);
   }
 
   #headline {
@@ -136,17 +128,161 @@
     padding: 0 4px;
   }
 
-  #subtitle {
+  /* full-width hero control bar (top edge) */
+  #hero-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 4;
+    display: flex;
+    align-items: stretch;
+    gap: 18px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--panel-border);
+    padding: 14px 24px;
     font-family: "JetBrains Mono", monospace;
-    font-size: 11px;
-    color: var(--stone-2);
-    letter-spacing: 0.02em;
+    pointer-events: auto;
+    overflow-x: auto;
+    scrollbar-width: thin;
   }
+  #hero-bar::-webkit-scrollbar { height: 4px; }
+  #hero-bar::-webkit-scrollbar-thumb { background: var(--panel-border); }
+
+  .hero-brand {
+    align-self: center;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .hero-select {
+    background: transparent;
+    border: 1px solid var(--panel-border);
+    color: var(--panel-muted);
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 5px 24px 5px 9px;
+    border-radius: 2px;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'><path d='M3 4.5l3 3 3-3' fill='none' stroke='%2350565d' stroke-width='1.5'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .hero-select:hover, .hero-select:focus {
+    color: var(--accent);
+    border-color: var(--accent);
+    outline: none;
+  }
+  .hero-select option {
+    background: var(--bg);
+    color: var(--panel-text);
+  }
+  .hero-group {
+    display: flex; flex-direction: column;
+    gap: 6px;
+  }
+  .hero-group-label {
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--stone-2);
+  }
+  .hero-divider {
+    width: 1px;
+    background: var(--panel-border);
+    align-self: stretch;
+  }
+  .hero-segmented {
+    display: flex;
+    gap: 2px;
+  }
+  .hero-seg {
+    background: transparent;
+    border: 1px solid var(--panel-border);
+    color: var(--panel-muted);
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 5px 9px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .hero-seg:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .hero-seg.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+  }
+  .hero-seg.active:hover { color: #ffffff; }
+
+  .hero-control-row {
+    display: flex; align-items: center;
+    gap: 8px;
+  }
+  .hero-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 90px;
+    height: 2px;
+    background: var(--panel-border);
+    border: none;
+    padding: 0; margin: 0;
+    cursor: pointer;
+  }
+  .hero-slider-narrow { width: 60px; }
+  .hero-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    background: var(--accent);
+    border-radius: 0; cursor: pointer; border: 0;
+  }
+  .hero-slider::-moz-range-thumb {
+    width: 12px; height: 12px;
+    background: var(--accent);
+    border-radius: 0; cursor: pointer; border: 0;
+  }
+  .hero-value {
+    font-size: 10px;
+    color: var(--accent);
+    min-width: 44px;
+    font-variant-numeric: tabular-nums;
+  }
+  .hero-switch {
+    width: 26px; height: 14px;
+    background: var(--panel-border);
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    position: relative;
+    padding: 0;
+  }
+  .hero-switch::after {
+    content: "";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 10px; height: 10px;
+    background: #ffffff;
+    border: 1px solid var(--panel-border);
+    box-sizing: border-box;
+    transition: left 0.15s ease;
+  }
+  .hero-switch.on { background: var(--accent); }
+  .hero-switch.on::after { left: 14px; border-color: var(--accent); }
 
   /* ---------- fault log feed (right column) ---------- */
   #fault-log {
     position: absolute;
-    top: 100px;
+    top: 100px;       /* sits below the top control bar */
     right: 28px;
     z-index: 3;
     display: flex;
@@ -166,10 +302,9 @@
     gap: 8px;
     align-items: baseline;
     padding: 7px 11px;
-    border-left: 2px solid rgba(255, 255, 255, 0.18);
-    background: rgba(20, 22, 28, 0.78);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    border: 1px dashed var(--dashed);
+    border-left: 2px solid var(--panel-border);
+    background: var(--bg);
     border-radius: 0 2px 2px 0;
     opacity: 0;
     transform: translateX(8px);
@@ -183,10 +318,10 @@
   .log-entry.log-fault { border-left-color: var(--fault); }
   .log-entry.log-scan,
   .log-entry.log-draft,
-  .log-entry.log-caught { border-left-color: var(--accent-on-dark); }
+  .log-entry.log-caught { border-left-color: var(--accent); }
 
   .log-ts {
-    color: var(--stone-2);
+    color: var(--panel-muted);
     font-size: 10px;
     font-variant-numeric: tabular-nums;
   }
@@ -198,9 +333,9 @@
   .log-entry.log-fault .log-tag { color: var(--fault); }
   .log-entry.log-scan .log-tag,
   .log-entry.log-draft .log-tag,
-  .log-entry.log-caught .log-tag { color: var(--accent-on-dark); }
-  .log-text { color: #ffffff; word-break: break-word; }
-  .log-entry.log-caught .log-text { color: #ffffff; }
+  .log-entry.log-caught .log-tag { color: var(--accent); }
+  .log-text { color: var(--panel-text); word-break: break-word; }
+  .log-entry.log-caught .log-text { color: var(--panel-text); }
 
   @keyframes pulse {
     0%, 100% { opacity: 1; }
@@ -213,10 +348,8 @@
     bottom: 24px; left: 28px;
     z-index: 2;
     pointer-events: none;
-    background: rgba(20, 22, 28, 0.72);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--bg);
+    border: 1px dashed var(--dashed);
     padding: 14px 18px;
     border-radius: 2px;
     font-family: "JetBrains Mono", monospace;
@@ -233,9 +366,8 @@
   .ledger-eyebrow::before {
     content: "";
     width: 6px; height: 6px;
-    background: var(--accent-on-dark);
+    background: var(--accent);
     border-radius: 50%;
-    box-shadow: 0 0 6px var(--accent-on-dark);
   }
 
   .ledger-primary {
@@ -244,14 +376,14 @@
   }
   .ledger-amount {
     font-size: 26px;
-    color: #ffffff;
+    color: var(--panel-text);
     font-weight: 600;
     font-feature-settings: "tnum";
     line-height: 1;
   }
   .ledger-label {
     font-size: 10px;
-    color: var(--stone-2);
+    color: var(--panel-muted);
     text-transform: uppercase;
     letter-spacing: 0.08em;
   }
@@ -263,44 +395,94 @@
   }
   .ledger-cell {
     font-size: 10px;
-    color: var(--stone-2);
+    color: var(--panel-muted);
     letter-spacing: 0.04em;
   }
   .ledger-cell span {
-    color: #ffffff;
+    color: var(--panel-text);
     font-weight: 600;
     font-feature-settings: "tnum";
   }
 
   .ledger-meta {
     font-size: 9px;
-    color: var(--stone-2);
+    color: var(--panel-muted);
     letter-spacing: 0.04em;
     text-transform: uppercase;
   }
   .ledger-meta .caught-count { color: var(--accent-on-dark); font-weight: 600; }
   .ledger-meta .held-count { color: var(--accent-on-dark); font-weight: 600; }
 
-  #fps {
-    position: absolute;
-    top: 24px; right: 28px;
-    font-family: "JetBrains Mono", monospace;
-    font-size: 10px;
-    color: var(--stone-2);
-    letter-spacing: 0.04em;
-    z-index: 2;
-    pointer-events: none;
-  }
+  #fps { display: none; }
 
-  /* ---------- panel ---------- */
+  /* panel + drawer machinery hidden — kept in DOM so JS refs still resolve */
+  #panel, #controls-btn, #close-btn { display: none !important; }
+
+  /* (legacy panel styles kept for completeness, never rendered) */
   #panel {
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: min(340px, 100vw);
     background: var(--panel);
     color: var(--panel-text);
     border-left: 1px solid var(--panel-border);
     padding: 28px 24px 32px;
     overflow-y: auto;
-    display: flex; flex-direction: column;
+    flex-direction: column;
     gap: 22px;
+    transform: translateX(100%);
+    z-index: 5;
+  }
+
+  /* gear button — kept hidden, no longer used */
+  #controls-btn {
+    position: absolute;
+    top: 24px;
+    right: 28px;
+    z-index: 4;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: var(--stone-2);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: opacity 0.22s ease, color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  #controls-btn:hover {
+    color: var(--accent-on-dark);
+    border-color: var(--accent-on-dark);
+    background: rgba(91, 141, 239, 0.08);
+  }
+  #controls-btn.hidden { opacity: 0; pointer-events: none; }
+
+  /* close button — inside the drawer header */
+  #close-btn {
+    position: absolute;
+    top: 22px;
+    right: 18px;
+    z-index: 2;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--panel-muted);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 6px 10px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  #close-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-soft);
   }
 
   .panel-header {
@@ -505,21 +687,18 @@
 
   /* ---------- in-ASCII label chips ---------- */
   .label-chip {
-    background: #ffffff;
-    color: var(--accent);
+    background: var(--accent);
+    color: #ffffff;
     font-weight: 600;
-    text-shadow: none;          /* override the photographic bloom from #ascii */
   }
   .label-chip.fault {
     background: var(--fault);
     color: #ffffff;
-    text-shadow: none;
     animation: chipPulse 0.8s ease-in-out infinite;
   }
   .label-chip.respawn {
-    background: var(--accent-on-dark);
+    background: var(--accent);
     color: #ffffff;
-    text-shadow: none;
     animation: chipPulse 0.8s ease-in-out infinite;
   }
   @keyframes chipPulse {
@@ -532,10 +711,8 @@
     position: absolute;
     bottom: 24px; right: 28px;
     z-index: 2;
-    background: rgba(255, 255, 255, 0.94);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid var(--panel-border);
+    background: var(--bg);
+    border: 1px dashed var(--dashed);
     padding: 14px 16px;
     border-radius: 2px;
     font-family: "JetBrains Mono", monospace;
@@ -560,16 +737,13 @@
 
   /* responsive */
   @media (max-width: 768px) {
-    #app {
-      grid-template-columns: 1fr;
-      grid-template-rows: 1fr auto;
-    }
+    #hero-bar { display: none; }
     #panel {
+      width: 100vw;
       border-left: none;
-      border-top: 1px solid var(--panel-border);
-      max-height: 50dvh;
       padding: 20px 18px;
     }
+    #controls-btn { top: 16px; right: 14px; padding: 7px 12px; }
     #overlay { top: 16px; left: 18px; max-width: 80%; gap: 6px; }
     #headline { font-size: 18px; }
     #fault-log {
@@ -624,13 +798,9 @@
   <div id="viewer">
     <div id="fault-flash"></div>
 
-    <div id="overlay">
-      <div class="brand-mark"><span class="dot"></span>respawn · ai recovery engineer</div>
-      <h1 id="headline">can you recover? <em>yes or no.</em></h1>
-      <div id="subtitle">scenario: high availability — multi-az</div>
-    </div>
 
     <div id="fps">0 fps</div>
+    <button id="controls-btn" type="button" aria-label="open controls panel">controls</button>
 
     <div id="fault-log" aria-live="polite"></div>
 
@@ -655,9 +825,80 @@
       <div class="legend-title">components</div>
       <div id="legend-items"></div>
     </div>
+
+    <div id="hero-bar">
+      <div class="brand-mark hero-brand"><span class="dot"></span>respawn · ai recovery engineer</div>
+
+      <span class="hero-divider"></span>
+
+      <div class="hero-group">
+        <span class="hero-group-label">scenario</span>
+        <div class="hero-segmented">
+          <button class="hero-seg active" type="button" data-scenario="ha">HA · multi-az</button>
+          <button class="hero-seg" type="button" data-scenario="backup">restore · DR</button>
+        </div>
+      </div>
+
+      <span class="hero-divider"></span>
+
+      <div class="hero-group">
+        <span class="hero-group-label">resolution</span>
+        <div class="hero-control-row">
+          <input type="range" min="60" max="340" value="200" id="hero-res" class="hero-slider" />
+          <span class="hero-value" id="hero-res-val">200</span>
+        </div>
+      </div>
+
+      <span class="hero-divider"></span>
+
+      <div class="hero-group">
+        <span class="hero-group-label">$/min downtime</span>
+        <div class="hero-control-row">
+          <input type="range" min="500" max="20000" step="100" value="5600" id="hero-cpm" class="hero-slider" />
+          <span class="hero-value" id="hero-cpm-val">$5,600</span>
+        </div>
+      </div>
+
+      <span class="hero-divider"></span>
+
+      <div class="hero-group">
+        <span class="hero-group-label">character set</span>
+        <select id="hero-charset" class="hero-select">
+          <option value="detailed">detailed</option>
+          <option value="standard">standard</option>
+          <option value="blocks">blocks</option>
+          <option value="binary">binary</option>
+          <option value="dots">dots</option>
+          <option value="respawn">respawn</option>
+        </select>
+      </div>
+
+      <span class="hero-divider"></span>
+
+      <div class="hero-group">
+        <span class="hero-group-label">color</span>
+        <div class="hero-segmented">
+          <button class="hero-seg active" type="button" data-hero-color="white">black</button>
+          <button class="hero-seg" type="button" data-hero-color="respawn">blue</button>
+          <button class="hero-seg" type="button" data-hero-color="mono">mono</button>
+          <button class="hero-seg" type="button" data-hero-color="full">full</button>
+        </div>
+      </div>
+
+      <span class="hero-divider"></span>
+
+      <div class="hero-group">
+        <span class="hero-group-label">auto-rotate</span>
+        <div class="hero-control-row">
+          <button class="hero-switch on" type="button" id="hero-rotate-toggle" aria-label="toggle auto-rotate"></button>
+          <input type="range" min="0" max="40" value="2.5" step="0.5" id="hero-speed" class="hero-slider hero-slider-narrow" />
+        </div>
+      </div>
+    </div>
   </div>
 
   <aside id="panel">
+    <button id="close-btn" type="button" aria-label="close controls panel">close</button>
     <div class="panel-header">
       <span class="eyebrow">live render</span>
       <h2>ai recovery engineer</h2>
@@ -784,9 +1025,9 @@
   };
 
   const COLOR_PRESETS = {
-    white:   "#e6e6eb",
-    respawn: "#5b8def",
-    mono:    "#a4a8af",
+    white:   "#2b2926",   // (light-mode: dark stone) — key name kept for back-compat
+    respawn: "#0000ee",   // brand blue
+    mono:    "#50565d",   // muted grey
     full:    null
   };
 
@@ -895,8 +1136,8 @@
   const speedSlider = document.getElementById("rotation-speed");
   const speedValue  = document.getElementById("speed-value");
   const resetBtn = document.getElementById("reset-camera");
-  const subtitleEl = document.getElementById("subtitle");
   const colorButtons = document.querySelectorAll("[data-color]");
+  const scenarioTabs = document.querySelectorAll(".scenario-tab");
   const labelsToggle = document.getElementById("labels-toggle");
   const legendEl = document.getElementById("legend");
   const legendItemsEl = document.getElementById("legend-items");
@@ -1222,9 +1463,8 @@
     currentLabels = raw.map(l => ({ id: l.id, pos: new THREE.Vector3(l.p[0], l.p[1], l.p[2]), text: l.t }));
 
     updateLegend(name);
-    subtitleEl.textContent = "scenario: " + (name === "ha"
-      ? "high availability — multi-az"
-      : "restore from backup — cross-region dr");
+    scenarioTabs.forEach(t => t.classList.toggle("active", t.dataset.scenario === name));
+    if (modelSel) modelSel.value = name;
   }
 
   function updateLegend(name) {
@@ -1770,6 +2010,89 @@
     COST_PER_MIN = parseInt(e.target.value, 10);
     cpmValue.textContent = '$' + COST_PER_MIN.toLocaleString('en-US');
     recomputeLedgerDollars();
+  });
+
+  // ---------- on-screen hero control bar ----------
+  // OrbitControls listens on viewerEl and calls preventDefault on pointerdown,
+  // which suppresses click events on buttons rendered over the viewer. Stopping
+  // propagation before OrbitControls sees the event lets click() fire normally.
+  function shieldFromOrbit(el) {
+    ["pointerdown", "mousedown", "touchstart"].forEach(ev => {
+      el.addEventListener(ev, e => e.stopPropagation());
+    });
+  }
+
+  // Scenario segmented buttons
+  const heroScenarioBtns = document.querySelectorAll("[data-scenario]");
+  function syncScenarioBtns() {
+    heroScenarioBtns.forEach(b => b.classList.toggle("active", b.dataset.scenario === state.model));
+  }
+  heroScenarioBtns.forEach(btn => {
+    shieldFromOrbit(btn);
+    btn.addEventListener("click", () => {
+      const name = btn.dataset.scenario;
+      if (name && name !== state.model) {
+        setModel(name);
+        syncScenarioBtns();
+      }
+    });
+  });
+  syncScenarioBtns();
+
+  // Resolution slider
+  const heroRes = document.getElementById("hero-res");
+  const heroResVal = document.getElementById("hero-res-val");
+  heroRes.value = state.cols;
+  heroResVal.textContent = state.cols;
+  shieldFromOrbit(heroRes);
+  heroRes.addEventListener("input", e => {
+    state.cols = parseInt(e.target.value, 10);
+    heroResVal.textContent = state.cols;
+    fitAscii();
+    updateLegendVisibility();
+  });
+
+  // $/min downtime slider
+  const heroCpm = document.getElementById("hero-cpm");
+  const heroCpmVal = document.getElementById("hero-cpm-val");
+  shieldFromOrbit(heroCpm);
+  heroCpm.addEventListener("input", e => {
+    COST_PER_MIN = parseInt(e.target.value, 10);
+    heroCpmVal.textContent = "$" + COST_PER_MIN.toLocaleString("en-US");
+    recomputeLedgerDollars();
+  });
+
+  // Character set dropdown
+  const heroCharset = document.getElementById("hero-charset");
+  shieldFromOrbit(heroCharset);
+  heroCharset.addEventListener("change", e => {
+    state.charset = CHARSETS[e.target.value] || CHARSETS.detailed;
+  });
+
+  // Color segmented buttons
+  const heroColorBtns = document.querySelectorAll("[data-hero-color]");
+  heroColorBtns.forEach(btn => {
+    shieldFromOrbit(btn);
+    btn.addEventListener("click", () => {
+      heroColorBtns.forEach(b => b.classList.toggle("active", b === btn));
+      state.color = btn.dataset.heroColor;
+      const preset = COLOR_PRESETS[state.color];
+      asciiEl.style.color = preset || "";
+    });
+  });
+
+  // Auto-rotate toggle + speed slider
+  const heroRotateToggle = document.getElementById("hero-rotate-toggle");
+  const heroSpeed = document.getElementById("hero-speed");
+  heroSpeed.value = state.rotationSpeed * 10;
+  shieldFromOrbit(heroRotateToggle);
+  shieldFromOrbit(heroSpeed);
+  heroRotateToggle.addEventListener("click", () => {
+    state.autoRotate = !state.autoRotate;
+    heroRotateToggle.classList.toggle("on", state.autoRotate);
+  });
+  heroSpeed.addEventListener("input", e => {
+    state.rotationSpeed = parseFloat(e.target.value) / 10;
   });
 
   const ro = new ResizeObserver(() => fitAscii());

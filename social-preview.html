@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>respawn · social preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #2b2926;
+    --muted: #50565d;
+    --accent: #0000ee;
+    --dashed: rgba(43, 41, 38, 0.42);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #e8e8eb;     /* outside container = grey so the poster's edges are visible during preview */
+    font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* exact 1200×630 frame — open this file in a browser and screenshot
+     the .poster element at native size for an OG-ready image. */
+  .poster {
+    width: 1200px;
+    height: 630px;
+    padding: 72px 80px;
+    background: var(--bg);
+    color: var(--text);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    margin: 24px auto;        /* tiny gutter so the edges are visible in preview */
+  }
+
+  /* brand mark — top-left */
+  .brand {
+    position: absolute;
+    top: 56px;
+    left: 80px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--text);
+  }
+  .brand .dot {
+    width: 10px;
+    height: 10px;
+    background: var(--accent);
+    border-radius: 50%;
+  }
+
+  /* headline */
+  .headline {
+    margin: 0;
+    font-size: 124px;
+    line-height: 1.02;
+    letter-spacing: -0.018em;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .headline .accent {
+    color: var(--accent);
+  }
+
+  /* short dashed rule beneath headline */
+  .rule {
+    width: 280px;
+    border-top: 1.5px dashed var(--dashed);
+    margin: 36px 0 28px 0;
+  }
+
+  .tagline {
+    font-size: 24px;
+    line-height: 1.55;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
+
+  /* bottom-right URL */
+  .url {
+    position: absolute;
+    bottom: 56px;
+    right: 80px;
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--text);
+  }
+  .url .arrow {
+    color: var(--accent);
+    margin-left: 10px;
+  }
+</style>
+</head>
+<body>
+  <div class="poster">
+    <div class="brand">
+      <span class="dot"></span>
+      respawn
+    </div>
+
+    <h1 class="headline">
+      can you recover?<br/>
+      <span class="accent">yes or no.</span>
+    </h1>
+
+    <div class="rule"></div>
+
+    <div class="tagline">
+      continuously tested · binary recovery state<br/>
+      ai recovery engineer.
+    </div>
+
+    <div class="url">respawnit.com<span class="arrow">→</span></div>
+  </div>
+</body>
+</html>

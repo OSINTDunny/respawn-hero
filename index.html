@@ -102,6 +102,26 @@
     max-width: 55%;
   }
 
+  /* brand mark + scenario picker — top-left overlay */
+  #brand-overlay {
+    position: absolute;
+    top: 24px;
+    left: 28px;
+    z-index: 3;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  #brand-overlay .hero-segmented {
+    pointer-events: auto;     /* re-enable on the buttons since overlay is pointer-events:none */
+  }
+  #brand-overlay .hero-seg {
+    padding: 8px 14px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+  }
   .brand-mark {
     display: flex; align-items: center; gap: 8px;
     font-family: "JetBrains Mono", monospace;
@@ -128,26 +148,25 @@
     padding: 0 4px;
   }
 
-  /* full-width hero control bar (top edge) */
+  /* full-width hero control bar (bottom edge) */
   #hero-bar {
     position: absolute;
-    top: 0;
+    bottom: 0;
     left: 0;
     right: 0;
     z-index: 4;
     display: flex;
+    flex-wrap: wrap;
     align-items: stretch;
-    gap: 18px;
+    gap: 12px 22px;        /* row-gap col-gap — row-gap kicks in when wrapping */
     background: var(--bg);
-    border-bottom: 1px solid var(--panel-border);
-    padding: 14px 24px;
+    border-top: 1px solid var(--panel-border);
+    padding: 12px 22px;
     font-family: "JetBrains Mono", monospace;
     pointer-events: auto;
-    overflow-x: auto;
-    scrollbar-width: thin;
   }
-  #hero-bar::-webkit-scrollbar { height: 4px; }
-  #hero-bar::-webkit-scrollbar-thumb { background: var(--panel-border); }
+  /* dividers only make sense in a single row — hide when content can wrap */
+  .hero-divider { display: none; }
 
   .hero-brand {
     align-self: center;
@@ -212,6 +231,7 @@
     padding: 5px 9px;
     cursor: pointer;
     border-radius: 2px;
+    white-space: nowrap;          /* never wrap labels like "HA · multi-az" */
     transition: color 0.15s, border-color 0.15s, background 0.15s;
   }
   .hero-seg:hover {
@@ -282,7 +302,7 @@
   /* ---------- fault log feed (right column) ---------- */
   #fault-log {
     position: absolute;
-    top: 100px;       /* sits below the top control bar */
+    top: 60px;        /* sits below the brand mark at top-left */
     right: 28px;
     z-index: 3;
     display: flex;
@@ -342,10 +362,10 @@
     50% { opacity: 0.35; }
   }
 
-  /* ---------- value ledger (bottom left) ---------- */
+  /* ---------- value ledger (bottom left, above the control bar) ---------- */
   #ledger {
     position: absolute;
-    bottom: 24px; left: 28px;
+    bottom: 160px; left: 28px;
     z-index: 2;
     pointer-events: none;
     background: var(--bg);
@@ -388,27 +408,31 @@
     letter-spacing: 0.08em;
   }
 
-  .ledger-row {
-    display: flex; flex-direction: column;
-    gap: 4px;
-    margin-bottom: 10px;
+  /* ledger breakdown — line items below the big dollar total */
+  .ledger-breakdown {
+    border-top: 1px dashed var(--dashed);
+    padding-top: 10px;
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
   }
-  .ledger-cell {
+  .ledger-line {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
     font-size: 10px;
-    color: var(--panel-muted);
     letter-spacing: 0.04em;
   }
-  .ledger-cell span {
+  .ledger-line-num {
     color: var(--panel-text);
     font-weight: 600;
     font-feature-settings: "tnum";
+    min-width: 56px;
+    text-align: right;
   }
-
-  .ledger-meta {
-    font-size: 9px;
+  .ledger-line-label {
     color: var(--panel-muted);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
   }
   .ledger-meta .caught-count { color: var(--accent-on-dark); font-weight: 600; }
   .ledger-meta .held-count { color: var(--accent-on-dark); font-weight: 600; }
@@ -685,22 +709,45 @@
   }
   .footer-tag strong { color: var(--panel-text); font-weight: 500; }
 
-  /* ---------- in-ASCII label chips ---------- */
-  .label-chip {
-    background: var(--accent);
-    color: #ffffff;
+  /* ---------- overlay labels (projected from 3D, fixed pixel size) ---------- */
+  #label-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    overflow: hidden;
+  }
+  .overlay-label {
+    position: absolute;
+    top: 0; left: 0;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
     font-weight: 600;
-  }
-  .label-chip.fault {
-    background: var(--fault);
-    color: #ffffff;
-    animation: chipPulse 0.8s ease-in-out infinite;
-  }
-  .label-chip.respawn {
+    letter-spacing: 0.02em;
     background: var(--accent);
     color: #ffffff;
+    padding: 3px 8px;
+    border-radius: 2px;
+    white-space: nowrap;
+    pointer-events: none;
+    will-change: transform;
+    transition: background-color 0.18s ease;
+    line-height: 1.1;
+  }
+  .overlay-label.hidden { display: none; }
+  .overlay-label.fault {
+    background: var(--fault);
     animation: chipPulse 0.8s ease-in-out infinite;
   }
+  .overlay-label.respawn {
+    background: var(--accent);
+    animation: chipPulse 0.8s ease-in-out infinite;
+  }
+
+  /* legacy in-ASCII chip classes — kept inert in case any stale label flag fires */
+  .label-chip { background: var(--accent); color: #ffffff; font-weight: 600; }
+  .label-chip.fault { background: var(--fault); color: #ffffff; }
+  .label-chip.respawn { background: var(--accent); color: #ffffff; }
   @keyframes chipPulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.55; }
@@ -709,7 +756,7 @@
   /* ---------- legend card (component key, bottom-right) ---------- */
   #legend {
     position: absolute;
-    bottom: 24px; right: 28px;
+    bottom: 160px; right: 28px;
     z-index: 2;
     background: var(--bg);
     border: 1px dashed var(--dashed);
@@ -810,41 +857,50 @@
         <span class="ledger-amount" id="ledger-dollars">$0</span>
         <span class="ledger-label">downtime avoided</span>
       </div>
-      <div class="ledger-row">
-        <div class="ledger-cell"><span id="ledger-eng">0</span> eng hrs saved</div>
-        <div class="ledger-cell"><span id="ledger-audit">0</span> compliance &amp; reporting hrs saved</div>
-      </div>
-      <div class="ledger-meta">
-        <span class="caught-count" id="ledger-caught">0</span> recovery kill chains caught
+      <div class="ledger-breakdown">
+        <div class="ledger-line">
+          <span class="ledger-line-num" id="ledger-minutes">0</span>
+          <span class="ledger-line-label">downtime minutes saved</span>
+        </div>
+        <div class="ledger-line">
+          <span class="ledger-line-num" id="ledger-eng">0</span>
+          <span class="ledger-line-label">eng hours saved</span>
+        </div>
+        <div class="ledger-line">
+          <span class="ledger-line-num" id="ledger-audit">0</span>
+          <span class="ledger-line-label">compliance &amp; reporting hrs saved</span>
+        </div>
+        <div class="ledger-line">
+          <span class="ledger-line-num" id="ledger-caught">0</span>
+          <span class="ledger-line-label">recovery kill chains caught</span>
+        </div>
       </div>
     </div>
 
     <pre id="ascii"></pre>
+    <div id="label-layer"></div>
 
     <div id="legend">
       <div class="legend-title">components</div>
       <div id="legend-items"></div>
     </div>
 
-    <div id="hero-bar">
-      <div class="brand-mark hero-brand"><span class="dot"></span>respawn · ai recovery engineer</div>
-
-      <span class="hero-divider"></span>
-
+    <div id="brand-overlay">
       <div class="hero-group">
         <span class="hero-group-label">scenario</span>
-        <div class="hero-segmented">
-          <button class="hero-seg active" type="button" data-scenario="ha">HA · multi-az</button>
-          <button class="hero-seg" type="button" data-scenario="backup">restore · DR</button>
+        <div class="hero-segmented" id="scenario-pick">
+          <button class="hero-seg active" type="button" data-scenario="ha">multi-AZ</button>
+          <button class="hero-seg" type="button" data-scenario="backup">warm standby</button>
+          <button class="hero-seg" type="button" data-scenario="br">rebuild</button>
         </div>
       </div>
+    </div>
 
-      <span class="hero-divider"></span>
-
+    <div id="hero-bar">
       <div class="hero-group">
         <span class="hero-group-label">resolution</span>
         <div class="hero-control-row">
-          <input type="range" min="60" max="340" value="200" id="hero-res" class="hero-slider" />
+          <input type="range" min="60" max="520" value="200" id="hero-res" class="hero-slider" />
           <span class="hero-value" id="hero-res-val">200</span>
         </div>
       </div>
@@ -877,12 +933,12 @@
 
       <div class="hero-group">
         <span class="hero-group-label">color</span>
-        <div class="hero-segmented">
-          <button class="hero-seg active" type="button" data-hero-color="white">black</button>
-          <button class="hero-seg" type="button" data-hero-color="respawn">blue</button>
-          <button class="hero-seg" type="button" data-hero-color="mono">mono</button>
-          <button class="hero-seg" type="button" data-hero-color="full">full</button>
-        </div>
+        <select id="hero-color" class="hero-select">
+          <option value="white">black</option>
+          <option value="respawn">blue</option>
+          <option value="mono">mono</option>
+          <option value="full">full color</option>
+        </select>
       </div>
 
       <span class="hero-divider"></span>
@@ -987,9 +1043,9 @@
       </div>
       <div class="slider-row">
         <span>rotation speed</span>
-        <span class="value" id="speed-value">0.25×</span>
+        <span class="value" id="speed-value">0.15×</span>
       </div>
-      <input type="range" id="rotation-speed" min="0" max="40" value="2.5" step="0.5" />
+      <input type="range" id="rotation-speed" min="0" max="40" value="1.5" step="0.5" />
       <button id="reset-camera" class="cta">reset view</button>
     </div>
 
@@ -1045,23 +1101,38 @@
     { id: 's3',          p: [0, -0.25, -2.5],  t: "[S3]" }
   ];
 
-  const LABELS_BACKUP = [
-    { id: 'r53',         p: [0, 3.55, 0],     t: "[route 53·failover]" },
-    { id: 'alb_primary', p: [-4, 1.82, 0],    t: "[ALB]" },
-    { id: 'ec2_primary', p: [-4.5, 0.55, 0.5], t: "[EC2]" },
-    { id: 'rds_primary', p: [-3, 1.0, -0.7],  t: "[RDS]" },
+  // backup & restore — only IaC + cross-region backups, DR region is empty
+  const LABELS_BR = [
+    { id: 'r53',         p: [0, 3.55, 0],     t: "[route 53]" },
+    { id: 'alb_primary', p: [-4, 1.82, 0],    t: "[ALB·primary]" },
+    { id: 'ec2_primary', p: [-4.5, 0.55, 0.5], t: "[EC2·primary]" },
+    { id: 'rds_primary', p: [-3, 1.0, -0.7],  t: "[RDS·primary]" },
     { id: 'snapshots',   p: [0, 1.98, 0],     t: "[snapshots]" },
     { id: 'vault',       p: [0, 0.2, 0.78],   t: "[AWS·Backup]" },
     { id: 's3_backup',   p: [0, 0.2, -2.5],   t: "[S3·backup]" },
+    { id: 'iac',         p: [0, 0.85, 1.8],   t: "[IaC]" },
+    { id: 'region_primary', p: [-4, -1.2, 2.0], t: "[primary region]" },
+    { id: 'region_dr',      p: [4, -1.2, 2.0],  t: "[dr region — empty]" }
+  ];
+
+  const LABELS_BACKUP = [
+    { id: 'r53',         p: [0, 3.55, 0],     t: "[route 53·failover]" },
+    { id: 'alb_primary', p: [-4, 1.82, 0],    t: "[ALB·primary]" },
+    { id: 'ec2_primary', p: [-4.5, 0.55, 0.5], t: "[EC2·primary]" },
+    { id: 'rds_primary', p: [-3, 1.0, -0.7],  t: "[RDS·primary]" },
+    { id: 'snapshots',   p: [0, 1.98, 0],     t: "[snapshots]" },
+    { id: 'vault',       p: [0, 0.2, 0.78],   t: "[AWS·Backup]" },
+    { id: 's3_backup',   p: [0, 0.2, -2.5],   t: "[S3·backup]" },
+    { id: 'alb_dr',      p: [4, 1.82, 0],     t: "[ALB·standby]" },
     { id: 'ec2_dr',      p: [4, 0.55, 0.5],   t: "[EC2·standby]" },
     { id: 'rds_dr',      p: [5.4, 1.0, -0.7], t: "[RDS·restored]" },
-    { id: 'region_primary', p: [-4, -1.2, 2.0], t: "[primary]" },
-    { id: 'region_dr',      p: [4, -1.2, 2.0],  t: "[dr·region]" }
+    { id: 'region_primary', p: [-4, -1.2, 2.0], t: "[primary region]" },
+    { id: 'region_dr',      p: [4, -1.2, 2.0],  t: "[dr region]" }
   ];
 
   const LEGEND_DATA = {
     ha: {
-      title: "high availability · multi-az",
+      title: "multi-AZ · high availability",
       items: [
         ["route 53",  "global dns"],
         ["cloudfront","edge cache"],
@@ -1073,14 +1144,26 @@
       ]
     },
     backup: {
-      title: "restore from backup · cross-region",
+      title: "warm standby · cross-region",
       items: [
         ["route 53",   "failover dns"],
         ["primary",    "active workload"],
         ["AWS Backup", "vault + policy"],
         ["snapshots",  "point-in-time"],
         ["S3 backup",  "long-term store"],
-        ["dr region",  "restored standby"]
+        ["dr region",  "cold standby fleet"]
+      ]
+    },
+    br: {
+      title: "backup & restore · cross-region",
+      items: [
+        ["route 53",   "primary dns only"],
+        ["primary",    "active workload"],
+        ["AWS Backup", "vault + cross-region copy"],
+        ["snapshots",  "point-in-time"],
+        ["S3 backup",  "long-term store"],
+        ["IaC",        "CFN / Terraform templates"],
+        ["dr region",  "empty — rebuilt at failover"]
       ]
     }
   };
@@ -1101,17 +1184,37 @@
     { title: "az-1 isolated by an aws control-plane event", detail: "ec2 api unreachable in az-1. existing instances run; replacements don't.", target: 'az1', breaks: ['web-az1'],                                  min: 50,  why: "alb shifts traffic to az-2 — capacity halved, latency spikes." }
   ];
 
+  // warm standby — kill chains specific to active/passive cross-region with pre-staged fleet
   const FAULTS_BACKUP = [
-    { title: "backup vault encrypted with kms key only in primary", detail: "key never replicated to dr region.",                    target: 'vault',       breaks: ['archive','restore-ec2','restore-rds'], min: 240, why: "snapshots unreadable in failover region. classic region trap." },
-    { title: "restore role lacks ec2:RunInstances in dr account",   detail: "least-privilege role copied without cross-account trust.", target: 'ec2_dr',    breaks: ['restore-ec2'],                          min: 180, why: "compute never spawns. recovery script exits 1, no alert." },
-    { title: "the last 3 snapshots failed silently",                detail: "aws backup status: 'failed' for 11 days. no alarm.",     target: 'snapshots',   breaks: ['backup-rds','backup-ec2','archive'],   min: 1440, why: "most recent valid snapshot is 14 days old." },
-    { title: "secrets manager only exists in primary region",       detail: "app config (db url, api keys) never replicated.",        target: 'vault',       breaks: ['restore-ec2'],                          min: 130, why: "dr fleet boots, cannot decrypt config, crash-loops." },
-    { title: "vpc peering between regions not configured",          detail: "restored compute and restored db live in unconnected vpcs.", target: 'ec2_dr',  breaks: ['restore-ec2','restore-rds'],            min: 110, why: "restored app cannot reach restored db. tcp timeout." },
+    { title: "backup vault KMS key only exists in primary",         detail: "key policy never replicated to dr region.",              target: 'vault',       breaks: ['archive','restore-ec2','restore-rds'], min: 240, why: "encrypted snapshots unreadable in failover region. region trap." },
+    { title: "secrets manager only exists in primary region",       detail: "app config (db url, api keys) never replicated.",        target: 'vault',       breaks: ['restore-ec2'],                          min: 130, why: "standby fleet boots, cannot decrypt config, crash-loops." },
+    { title: "vpc peering between regions not configured",          detail: "primary and dr live in unconnected vpcs.",                target: 'ec2_dr',      breaks: ['restore-ec2','restore-rds'],            min: 110, why: "failover compute cannot reach failover db. tcp timeout." },
     { title: "route 53 failover policy points to dead ip",          detail: "secondary record was a placeholder from migration day.", target: 'r53',         breaks: ['dns-failover'],                         min: 70,  why: "failover triggers. 100% of traffic into a black hole." },
-    { title: "param store restored to wrong env",                   detail: "dr restore pulled the staging parameter tree, not prod.", target: 'ec2_dr',    breaks: ['restore-ec2'],                          min: 55,  why: "app boots with staging db credentials. nothing logs in." },
-    { title: "missing rds option group in dr region",               detail: "custom option group never created in failover region.",  target: 'rds_dr',      breaks: ['restore-rds'],                          min: 105, why: "rds restore fails on engine configuration mismatch." },
-    { title: "iam role assumed by restore lambda lacks kms:Decrypt",detail: "rotated key policy never re-grants the role.",           target: 'vault',       breaks: ['restore-ec2','restore-rds'],            min: 70,  why: "every restored object 403s on first read." },
-    { title: "dr region cold start hit instance quota",             detail: "default ec2 quota in dr region was never raised.",      target: 'region_dr',   breaks: ['restore-ec2'],                          min: 720, why: "restore launches 4 of 24 instances. quota request: 2 days." }
+    { title: "iam role for cross-region replicator lacks kms:Decrypt", detail: "rotated key policy never re-grants the role.",        target: 'vault',       breaks: ['restore-ec2','restore-rds'],            min: 70,  why: "every replicated object 403s on first read." },
+    { title: "rds standby in different vpc — never tested",         detail: "vpc id drifted post-migration. promotion path untested.", target: 'rds_dr',      breaks: ['restore-rds'],                          min: 95,  why: "promotion completes → app cannot reach standby endpoint." },
+    { title: "dr region asg launch template references stale ami",  detail: "ami deregistered after hardening sweep. dr ASG broken.", target: 'ec2_dr',      breaks: ['web-dr'],                               min: 80,  why: "scale-up event in dr launches 0 instances." },
+    { title: "aurora global database replica lag exceeds RPO",      detail: "secondary cluster 18 min behind primary. RPO is 5 min.", target: 'rds_dr',      breaks: ['restore-rds'],                          min: 60,  why: "promoted standby is 13 minutes behind real data." },
+    { title: "dr alb target group health checks misconfigured",     detail: "health check path is /health, app exposes /healthz.",    target: 'alb_dr',      breaks: ['web-dr'],                               min: 45,  why: "alb marks every instance unhealthy on failover." },
+    { title: "dr fleet running stale ami — drifted from primary",   detail: "ami pipeline only deploys to primary. dr 3 versions behind.", target: 'ec2_dr',  breaks: ['web-dr'],                               min: 90,  why: "old binaries crash on data formats from current primary." }
+  ];
+
+  // backup & restore — kill chains specific to rebuilding from scratch (IaC + cold backups)
+  const FAULTS_BR = [
+    { title: "terraform state file corrupted",                      detail: "s3 backend has dueling state versions, lock file orphaned 3 weeks.",  target: 'iac',       breaks: ['iac-deploy'],          min: 480,  why: "rebuild blocked. state surgery required before any restore attempt." },
+    { title: "cloudformation template references a deleted vpc",    detail: "vpc cleanup removed the resource; IaC still wires to it.",            target: 'iac',       breaks: ['iac-deploy'],          min: 240,  why: "stack create fails. manual template fix mid-incident." },
+    { title: "AMI deregistered — can't recreate EC2 instances",     detail: "last good ami deregistered 47 days ago. no replacement built.",       target: 'ec2_primary', breaks: ['iac-deploy'],        min: 1080, why: "must rebuild ami from scratch before rebuild can start." },
+    { title: "dr account ec2 quota: 4 vCPU of 96 needed",           detail: "quota in dr region never raised. quota request: 2–4 business days.", target: 'region_dr',   breaks: ['iac-deploy'],          min: 2880, why: "rebuild blocked at 4% capacity. ticket sits in support queue." },
+    { title: "the last 3 snapshots failed silently",                detail: "aws backup status: 'failed' for 14 days. no cloudwatch alarm.",      target: 'snapshots',   breaks: ['backup-rds','backup-ec2','archive'], min: 1440, why: "most recent valid snapshot is 14 days old. data loss in weeks." },
+    { title: "vault KMS key not replicated cross-region",           detail: "snapshots exist in dr region copy but can't be decrypted.",          target: 'vault',       breaks: ['cross-region-copy'],   min: 720,  why: "backups exist but are unreadable. effectively no backup." },
+    { title: "restore IAM role lacks ec2:RunInstances",             detail: "least-privilege migration removed RunInstances 6 months ago.",       target: 'iac',         breaks: ['iac-deploy'],          min: 360,  why: "rebuild halts at first EC2 launch. IAM diff + re-apply needed." },
+    { title: "IaC pipeline hasn't run in 90 days",                  detail: "last CI run was march. drift between prod and IaC unmeasured.",     target: 'iac',         breaks: ['iac-deploy'],          min: 540,  why: "actual prod diverges from IaC. rebuild produces wrong system." },
+    { title: "secrets manager not replicated to dr region",         detail: "app config (db url, api keys) lives only in primary.",              target: 'vault',       breaks: ['cross-region-copy'],   min: 180,  why: "rebuilt app boots without secrets. crash-loops on first request." },
+    { title: "rds option group missing in dr region",               detail: "custom option group exists only in primary account.",                target: 'region_dr',   breaks: ['iac-deploy'],          min: 240,  why: "rds restore fails on engine configuration mismatch." },
+    { title: "ECR container registry not replicated to dr",         detail: "registry replication policy missing dr region.",                     target: 'iac',         breaks: ['iac-deploy'],          min: 300,  why: "compute can't pull container images. blocks all rebuild." },
+    { title: "param store restored to wrong env (staging)",         detail: "dr restore pulled staging parameter tree, not prod.",                target: 'iac',         breaks: ['iac-deploy'],          min: 120,  why: "app boots with staging db credentials. nothing logs in." },
+    { title: "vault deleted by lifecycle policy",                   detail: "aggressive retention policy expired the most recent vault.",         target: 'vault',       breaks: ['archive','cross-region-copy'], min: 4320, why: "no snapshots to restore from. catastrophic data loss." },
+    { title: "DNS records managed outside IaC",                     detail: "route 53 hostnames hand-edited in console, not tracked.",            target: 'r53',         breaks: ['dns-primary'],         min: 180,  why: "app comes up but traffic doesn't route. manual DNS at 3am." },
+    { title: "cross-account backup copy IAM not configured",        detail: "vault in primary account, restore target is dr account — no trust.",target: 'vault',       breaks: ['cross-region-copy'],   min: 360,  why: "snapshots can't be copied to dr account. permission diff." }
   ];
 
   // ============================================================
@@ -1151,6 +1254,7 @@
 
   const logContainerEl = document.getElementById("fault-log");
   const flashEl = document.getElementById("fault-flash");
+  const labelLayerEl = document.getElementById("label-layer");
 
   const MAX_LOG_ENTRIES = 7;
   const LOG_ENTRY_TTL = 16000;
@@ -1158,6 +1262,7 @@
   const logState = { entries: [] };
 
   const ledgerDollarsEl = document.getElementById("ledger-dollars");
+  const ledgerMinutesEl = document.getElementById("ledger-minutes");
   const ledgerEngEl = document.getElementById("ledger-eng");
   const ledgerAuditEl = document.getElementById("ledger-audit");
   const ledgerCaughtEl = document.getElementById("ledger-caught");
@@ -1179,7 +1284,7 @@
     charset: CHARSETS.detailed,
     color: "white",
     autoRotate: true,
-    rotationSpeed: 0.25,
+    rotationSpeed: 0.15,
     model: "ha",
     showLabels: true
   };
@@ -1204,7 +1309,7 @@
     dollars: 0,
     eng: 0,
     audit: 0,
-    displayed: { dollars: 0, eng: 0, audit: 0 }
+    displayed: { dollars: 0, minutes: 0, eng: 0, audit: 0 }
   };
 
   // ============================================================
@@ -1220,18 +1325,18 @@
   function setCameraForViewport() {
     const w = viewerEl.clientWidth, h = viewerEl.clientHeight;
     const aspect = w / (h || 1);
+    // DR scenarios (warm standby + backup & restore) are ~43% wider than HA —
+    // pull camera back and widen FOV accordingly
+    const dr = state.model === "backup" || state.model === "br";
     if (aspect < 0.85) {
-      // tall + narrow (phone portrait) — pull back, widen FOV
-      camera.fov = 54;
-      initialCameraPos.set(0, 5, 14);
+      camera.fov = dr ? 60 : 54;
+      initialCameraPos.set(0, dr ? 5.5 : 5, dr ? 18 : 14);
     } else if (aspect < 1.3) {
-      // squarish (tablet / phone landscape)
-      camera.fov = 44;
-      initialCameraPos.set(4, 5, 11);
+      camera.fov = dr ? 50 : 44;
+      initialCameraPos.set(dr ? 4.5 : 4, dr ? 5.5 : 5, dr ? 14 : 11);
     } else {
-      // wide (desktop)
-      camera.fov = 38;
-      initialCameraPos.set(6.5, 5, 10);
+      camera.fov = dr ? 42 : 38;
+      initialCameraPos.set(dr ? 7.5 : 6.5, dr ? 5.5 : 5, dr ? 13 : 10);
     }
     camera.position.copy(initialCameraPos);
     camera.lookAt(0, 0, 0);
@@ -1298,12 +1403,29 @@
     group.add(body);
     return group;
   }
+  // solid cylindrical "pipes" for data flow — thicker + brighter than components
+  // so they read as the active "flow" against the static "boxes"
+  const _connY = new THREE.Vector3(0, 1, 0);
   function connectorLine(from, to, color) {
-    const g = new THREE.BufferGeometry().setFromPoints([from, to]);
-    const m = new THREE.LineDashedMaterial({ color, dashSize: 0.2, gapSize: 0.1, linewidth: 1 });
-    const line = new THREE.Line(g, m);
-    line.computeLineDistances();
-    return line;
+    const dir = new THREE.Vector3().subVectors(to, from);
+    const len = dir.length();
+    if (len < 0.0001) {
+      const empty = new THREE.Group();
+      empty.material = { color: new THREE.Color(color) };  // dummy for fault system
+      return empty;
+    }
+    const g = new THREE.CylinderGeometry(0.085, 0.085, len, 10);
+    const m = new THREE.MeshStandardMaterial({
+      color,
+      emissive: color,
+      emissiveIntensity: 0.6,    // bright enough to stand out against the components
+      metalness: 0.1,
+      roughness: 0.3
+    });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.position.copy(from).add(dir.clone().multiplyScalar(0.5));
+    mesh.quaternion.setFromUnitVectors(_connY, dir.normalize());
+    return mesh;
   }
   function regionFloor(w, d, color, y = -1.3, edgeColor = 0x6a8eff) {
     const g = new THREE.BoxGeometry(w, 0.06, d);
@@ -1413,15 +1535,95 @@
     root.add(ctx.reg('ec2_dr', ec2Dr));
     const rdsDR = ctx.reg('rds_dr', dbCylinder(COLOR.structureD)); rdsDR.position.set(5.4, 0.4, -0.7); root.add(rdsDR);
 
+    // DR-side cold-standby ALB — accurate failover target for Route 53
+    const albDR = ctx.reg('alb_dr', box(2.2, 0.4, 0.7, COLOR.structureD, { edgeColor: 0x6a8eff }));
+    albDR.position.set(4, 1.5, 0);
+    albDR.material.opacity = 0.65;
+    albDR.material.transparent = true;
+    root.add(albDR);
+
     const r53 = ctx.reg('r53', box(0.9, 0.9, 0.9, COLOR.structure)); r53.position.set(0, 3, 0); root.add(r53);
 
     ctx.con(new THREE.Vector3(-3, 0.4, -0.7), new THREE.Vector3(-0.7, 0.2, 0), COLOR.accent, 'backup-rds');
     ctx.con(new THREE.Vector3(-4, 0.1, 0.5),  new THREE.Vector3(-0.7, 0.2, 0.3), COLOR.accent, 'backup-ec2');
     ctx.con(new THREE.Vector3(0, 0.2, -0.7),  new THREE.Vector3(0, -0.3, -2.3), 0xffffff, 'archive');
-    ctx.con(new THREE.Vector3(0.7, 0.2, 0),   new THREE.Vector3(3.5, 0.4, -0.7), 0xffffff, 'restore-ec2');
-    ctx.con(new THREE.Vector3(0.7, 0.2, 0),   new THREE.Vector3(5.4, 0.4, -0.7), 0xffffff, 'restore-rds');
-    ctx.con(new THREE.Vector3(-0.2, 2.7, 0),  new THREE.Vector3(-4, 1.8, 0),    COLOR.accent, 'dns-primary');
-    ctx.con(new THREE.Vector3(0.2, 2.7, 0),   new THREE.Vector3(4, 1.8, 0),     0x6a8eff, 'dns-failover');
+    ctx.con(new THREE.Vector3(0.7, 0.2, 0),   new THREE.Vector3(3.85, 0.4, -0.25), 0xffffff, 'restore-ec2');
+    ctx.con(new THREE.Vector3(0.7, 0.2, 0),   new THREE.Vector3(5.4, 0.9, -0.7),   0xffffff, 'restore-rds');
+    // DR ALB → DR EC2 fleet (cold failover path)
+    ctx.con(new THREE.Vector3(4, 1.3, 0),     new THREE.Vector3(3.85, 0.5, -0.25), 0x6a8eff, 'web-dr');
+    ctx.con(new THREE.Vector3(-0.2, 2.7, 0),  new THREE.Vector3(-4, 1.7, 0),    COLOR.accent, 'dns-primary');
+    ctx.con(new THREE.Vector3(0.2, 2.7, 0),   new THREE.Vector3(4, 1.7, 0),     0x6a8eff, 'dns-failover');
+
+    return { root, components: ctx.components, connectors: ctx.connectors };
+  }
+
+  // ---------- backup & restore model — empty DR, all rebuild is from IaC + vault ----------
+  function buildBR() {
+    const root = new THREE.Group();
+    const ctx = createCtx(root);
+
+    // Primary region — full active workload
+    const primary = regionFloor(5, 5, COLOR.region, -1.3, COLOR.accent);
+    primary.position.x = -4;
+    root.add(ctx.reg('region_primary', primary));
+
+    // DR region — visible floor but EMPTY (that's the point — nothing pre-deployed)
+    const dr = regionFloor(5, 5, COLOR.region, -1.3, 0x6a8eff);
+    dr.position.x = 4;
+    dr.material.opacity = 0.35;   // dimmer than the warm-standby floor — clearly inert
+    root.add(ctx.reg('region_dr', dr));
+
+    // Primary EC2 cluster
+    const ec2Primary = new THREE.Group();
+    for (let i = 0; i < 4; i++) {
+      const e = box(0.6, 0.6, 0.6, COLOR.structure);
+      const col = i % 2; const row = Math.floor(i / 2);
+      e.position.set(-5 + col * 0.9, 0.1, -0.7 + row * 0.9);
+      ec2Primary.add(e);
+    }
+    root.add(ctx.reg('ec2_primary', ec2Primary));
+
+    const rdsP = ctx.reg('rds_primary', dbCylinder(COLOR.structure));
+    rdsP.position.set(-3, 0.4, -0.7); root.add(rdsP);
+
+    const albP = ctx.reg('alb_primary', box(2.2, 0.4, 0.7, COLOR.structureD));
+    albP.position.set(-4, 1.5, 0); root.add(albP);
+
+    // Center: vault + snapshots + s3 (same as warm standby — the data side)
+    const vault = ctx.reg('vault', box(1.4, 1.6, 1.4, COLOR.backup));
+    vault.position.set(0, 0.2, 0); root.add(vault);
+    const lid = box(1.5, 0.15, 1.5, COLOR.accent);
+    lid.position.set(0, 1.1, 0); root.add(lid);
+
+    const snapStack = new THREE.Group();
+    for (let i = 0; i < 4; i++) {
+      const s = box(0.9, 0.06, 0.9, COLOR.structureD);
+      s.position.set(0, 1.4 + i * 0.12, 0);
+      snapStack.add(s);
+    }
+    root.add(ctx.reg('snapshots', snapStack));
+
+    const s3 = ctx.reg('s3_backup', cylinder(0.8, 0.9, COLOR.storage, 6));
+    s3.position.set(0, -0.3, -2.5); root.add(s3);
+
+    // IaC indicator — a small distinct cube representing the IaC repository
+    const iac = ctx.reg('iac', box(0.7, 0.7, 0.7, 0x8a6fd9));   // purple to stand out
+    iac.position.set(0, 0.35, 1.8);
+    root.add(iac);
+
+    const r53 = ctx.reg('r53', box(0.9, 0.9, 0.9, COLOR.structure));
+    r53.position.set(0, 3, 0); root.add(r53);
+
+    // Connectors
+    ctx.con(new THREE.Vector3(-3, 0.4, -0.7), new THREE.Vector3(-0.7, 0.2, 0),  COLOR.accent, 'backup-rds');
+    ctx.con(new THREE.Vector3(-4, 0.1, 0.5),  new THREE.Vector3(-0.7, 0.2, 0.3), COLOR.accent, 'backup-ec2');
+    ctx.con(new THREE.Vector3(0, 0.2, -0.7),  new THREE.Vector3(0, -0.3, -2.3), 0xffffff,     'archive');
+    // cross-region vault copy — vault to DR region (the data side of rebuild)
+    ctx.con(new THREE.Vector3(0.7, 0.2, 0),   new THREE.Vector3(4, 0.1, -0.5),  0xffffff,     'cross-region-copy');
+    // IaC deploy path — IaC to DR (the infrastructure side of rebuild)
+    ctx.con(new THREE.Vector3(0.35, 0.5, 1.6), new THREE.Vector3(4, 0.2, 0.5),  0x8a6fd9,     'iac-deploy');
+    // R53 to primary only — no failover target since DR has nothing to route to
+    ctx.con(new THREE.Vector3(0, 2.7, 0),     new THREE.Vector3(-4, 1.7, 0),    COLOR.accent, 'dns-primary');
 
     return { root, components: ctx.components, connectors: ctx.connectors };
   }
@@ -1450,17 +1652,36 @@
       });
     }
 
-    const built = name === "ha" ? buildHA() : buildBackup();
+    const built = name === "ha" ? buildHA()
+                : name === "br" ? buildBR()
+                : buildBackup();
     currentModel = built.root;
     currentComponents = built.components;
     currentConnectors = built.connectors;
     scene.add(currentModel);
 
     state.model = name;
-    currentFaults = name === "ha" ? FAULTS_HA : FAULTS_BACKUP;
+    currentFaults = name === "ha" ? FAULTS_HA
+                  : name === "br" ? FAULTS_BR
+                  : FAULTS_BACKUP;
+    setCameraForViewport();   // reframe for the new scenario's wider/narrower spread
 
-    const raw = name === "ha" ? LABELS_HA : LABELS_BACKUP;
+    const raw = name === "ha" ? LABELS_HA
+              : name === "br" ? LABELS_BR
+              : LABELS_BACKUP;
     currentLabels = raw.map(l => ({ id: l.id, pos: new THREE.Vector3(l.p[0], l.p[1], l.p[2]), text: l.t }));
+
+    // rebuild overlay label DOM
+    labelLayerEl.innerHTML = "";
+    for (const lbl of currentLabels) {
+      const el = document.createElement("span");
+      el.className = "overlay-label";
+      el.textContent = lbl.text;
+      labelLayerEl.appendChild(el);
+      lbl.el = el;
+      lbl.currentText = lbl.text;
+      lbl.currentMode = "";
+    }
 
     updateLegend(name);
     scenarioTabs.forEach(t => t.classList.toggle("active", t.dataset.scenario === name));
@@ -1730,6 +1951,7 @@
 
   function animateLedger() {
     animateNumber('dollars', ledgerDollarsEl, ledger.dollars, 1100, formatDollars);
+    animateNumber('minutes', ledgerMinutesEl, ledger.minutes, 900, formatInt);
     animateNumber('eng', ledgerEngEl, ledger.eng, 900, formatInt);
     animateNumber('audit', ledgerAuditEl, ledger.audit, 900, formatInt);
   }
@@ -1810,39 +2032,8 @@
       }
     }
 
-    const labelsVisible = state.showLabels && cols >= 70 && currentLabels.length && currentModel;
-    if (labelsVisible) {
-      currentModel.updateMatrixWorld();
-      const activeTarget = fault.active ? fault.active.target : null;
-      const phase = fault.phase;
-      const outcome = fault.outcome;
-
-      for (const lbl of currentLabels) {
-        tmpVec.copy(lbl.pos).applyMatrix4(currentModel.matrixWorld).project(camera);
-        if (tmpVec.z < -1 || tmpVec.z > 1) continue;
-        const cx = Math.round((tmpVec.x + 1) * 0.5 * cols);
-        const cy = Math.round((1 - tmpVec.y) * 0.5 * rows);
-        if (cy < 0 || cy >= rows) continue;
-
-        let text = lbl.text;
-        let flag = 1;
-        if (activeTarget === lbl.id) {
-          if (phase === 'inject') { text = "[!" + lbl.text.slice(1); flag = 2; }
-          else if (phase === 'scan')    { text = "[?" + lbl.text.slice(1); flag = 3; }
-          else if (phase === 'patch')   { text = "[→" + lbl.text.slice(1); flag = 3; }
-          else if (phase === 'outcome') { text = "[+" + lbl.text.slice(1); flag = 3; }
-        }
-
-        const start = cx - Math.floor(text.length / 2);
-        for (let i = 0; i < text.length; i++) {
-          const x = start + i;
-          if (x < 0 || x >= cols) continue;
-          const cellIdx = cy * cols + x;
-          gridChars[cellIdx] = text[i];
-          gridLabel[cellIdx] = flag;
-        }
-      }
-    }
+    // overlay labels are projected separately in updateOverlayLabels() so they
+    // stay at a fixed pixel size and don't depend on the ASCII grid density
 
     // serialize with span coalescing
     let out = "";
@@ -1911,6 +2102,69 @@
   }
 
   // ============================================================
+  // OVERLAY LABELS — projected from 3D each frame, fixed pixel size
+  // ============================================================
+  function updateOverlayLabels() {
+    if (!currentModel || !currentLabels.length) return;
+    if (!state.showLabels) {
+      for (const lbl of currentLabels) if (lbl.el) lbl.el.classList.add("hidden");
+      return;
+    }
+
+    currentModel.updateMatrixWorld();
+    const activeTarget = fault.active ? fault.active.target : null;
+    const phase = fault.phase;
+    const w = viewerEl.clientWidth;
+    const h = viewerEl.clientHeight;
+
+    // ASCII art is centered in the viewer at a specific size (limited by char aspect ~0.6:1).
+    // Project labels into the ASCII art's grid-pixel coordinates, not the viewer's,
+    // so they land on the components rather than drifting from them.
+    const cols = state.cols;
+    const rows = getRows(cols);
+    const fontSize = Math.max(4, Math.min(w / cols / 0.6, h / rows));
+    const asciiW = cols * 0.6 * fontSize;
+    const asciiH = rows * fontSize;
+    const asciiX0 = (w - asciiW) / 2;
+    const asciiY0 = (h - asciiH) / 2;
+
+    for (const lbl of currentLabels) {
+      if (!lbl.el) continue;
+      tmpVec.copy(lbl.pos).applyMatrix4(currentModel.matrixWorld).project(camera);
+      if (tmpVec.z < -1 || tmpVec.z > 1) {
+        lbl.el.classList.add("hidden");
+        continue;
+      }
+      lbl.el.classList.remove("hidden");
+      // NDC -> grid coords -> ASCII pixel coords (centered in viewer)
+      const col = (tmpVec.x + 1) * 0.5 * cols;
+      const row = (1 - tmpVec.y) * 0.5 * rows;
+      const x = asciiX0 + col * 0.6 * fontSize;
+      const y = asciiY0 + row * fontSize;
+      lbl.el.style.transform = "translate(" + x + "px, " + y + "px) translate(-50%, -50%)";
+
+      // phase-aware label text + chip color
+      let text = lbl.text;
+      let mode = "";
+      if (activeTarget === lbl.id) {
+        if (phase === "inject")        { text = "[!" + lbl.text.slice(1); mode = "fault"; }
+        else if (phase === "scan")     { text = "[?" + lbl.text.slice(1); mode = "respawn"; }
+        else if (phase === "patch")    { text = "[→" + lbl.text.slice(1); mode = "respawn"; }
+        else if (phase === "outcome")  { text = "[+" + lbl.text.slice(1); mode = "respawn"; }
+      }
+
+      if (text !== lbl.currentText) {
+        lbl.el.textContent = text;
+        lbl.currentText = text;
+      }
+      if (mode !== lbl.currentMode) {
+        lbl.el.className = "overlay-label" + (mode ? " " + mode : "");
+        lbl.currentMode = mode;
+      }
+    }
+  }
+
+  // ============================================================
   // MAIN TICK
   // ============================================================
 
@@ -1930,6 +2184,7 @@
     tickLog(now);
     controls.update();
     updateAscii();
+    updateOverlayLabels();
 
     frames++;
     fpsTimer += dt;
@@ -2069,16 +2324,13 @@
     state.charset = CHARSETS[e.target.value] || CHARSETS.detailed;
   });
 
-  // Color segmented buttons
-  const heroColorBtns = document.querySelectorAll("[data-hero-color]");
-  heroColorBtns.forEach(btn => {
-    shieldFromOrbit(btn);
-    btn.addEventListener("click", () => {
-      heroColorBtns.forEach(b => b.classList.toggle("active", b === btn));
-      state.color = btn.dataset.heroColor;
-      const preset = COLOR_PRESETS[state.color];
-      asciiEl.style.color = preset || "";
-    });
+  // Color dropdown
+  const heroColor = document.getElementById("hero-color");
+  shieldFromOrbit(heroColor);
+  heroColor.addEventListener("change", e => {
+    state.color = e.target.value;
+    const preset = COLOR_PRESETS[state.color];
+    asciiEl.style.color = preset || "";
   });
 
   // Auto-rotate toggle + speed slider
